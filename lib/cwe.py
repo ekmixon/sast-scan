@@ -47,7 +47,7 @@ def get_name(cid):
         return ""
     name = data.get("Name")
     if not name.endswith("."):
-        name = name + "."
+        name = f"{name}."
     return name
 
 
@@ -70,5 +70,5 @@ def get_description(cid, extended=False):
     desc = desc.replace("::TYPE:Terminology:NOTE:", "\n\nNOTE:\n")
     desc = desc.replace("::", "")
     if not desc.endswith("."):
-        desc = desc + "."
+        desc = f"{desc}."
     return desc

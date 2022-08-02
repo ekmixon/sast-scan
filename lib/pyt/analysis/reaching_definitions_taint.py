@@ -44,5 +44,4 @@ class ReachingDefinitionsTaintAnalysis:
 
     def dep(self, q_1):
         """Represents the dep mapping from Schwartzbach."""
-        for node in q_1.outgoing:
-            yield node
+        yield from q_1.outgoing

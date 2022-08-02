@@ -26,11 +26,11 @@ def is_django_view_function(ast_node):
 
 def is_flask_route_function(ast_node):
     """Check whether function uses a route decorator."""
-    for decorator in ast_node.decorator_list:
-        if isinstance(decorator, ast.Call):
-            if _get_last_of_iterable(get_call_names(decorator.func)) == "route":
-                return True
-    return False
+    return any(
+        isinstance(decorator, ast.Call)
+        and _get_last_of_iterable(get_call_names(decorator.func)) == "route"
+        for decorator in ast_node.decorator_list
+    )
 
 
 def is_taintable_function(ast_node):
@@ -93,17 +93,11 @@ def is_taintable_function(ast_node):
     for n in ["valid", "sanitize", "sanitise", "is_", "set_", "assert"]:
         if n in ast_node.name:
             return False
-    # Should we limit the scan only to web routes?
-    web_route_only = os.environ.get("WEB_ROUTE_ONLY", False)
-    if web_route_only:
-        return False
-    return True
+    return not (web_route_only := os.environ.get("WEB_ROUTE_ONLY", False))
 
 
 def is_function_with_leading_(ast_node):
-    if ast_node.name.startswith("_"):
-        return True
-    return False
+    return bool(ast_node.name.startswith("_"))
 
 
 def _get_last_of_iterable(iterable):

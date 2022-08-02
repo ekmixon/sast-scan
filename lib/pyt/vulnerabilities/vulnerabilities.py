@@ -63,7 +63,7 @@ def find_secondary_sources(assignment_nodes, sources, lattice):
 
 
 def find_assignments(assignment_nodes, source, lattice):
-    old = list()
+    old = []
     # propagate reassignments of the source node
     new = [source.cfg_node]
 
@@ -102,7 +102,7 @@ def find_triggers(nodes, trigger_words):
     Returns:
         List of found TriggerNodes
     """
-    trigger_nodes = list()
+    trigger_nodes = []
     for node in nodes:
         trigger_nodes.extend(iter(label_starts_with(node, trigger_words)))
     return trigger_nodes
@@ -136,14 +136,17 @@ def label_starts_with(node, triggers):
         trigger_words can be in one node.
     """
     for trigger in triggers:
-        if trigger.trigger_word in node.label:
-            if (
+        if (
+            trigger.trigger_word in node.label
+            and (
                 f"ret_{trigger.trigger_word}" in node.label
                 or f" {trigger.trigger_word}" in node.label
                 or f".{trigger.trigger_word}" in node.label
                 or node.label.startswith(trigger.trigger_word)
-            ) and f"ret_self.{trigger.trigger_word}" not in node.label:
-                yield TriggerNode(trigger, node)
+            )
+            and f"ret_self.{trigger.trigger_word}" not in node.label
+        ):
+            yield TriggerNode(trigger, node)
 
 
 def build_sanitiser_node_dict(cfg, sinks_in_file):
@@ -158,22 +161,22 @@ def build_sanitiser_node_dict(cfg, sinks_in_file):
     Returns:
         A string -> TriggerNode dict.
     """
-    sanitisers = list()
+    sanitisers = []
     for sink in sinks_in_file:
         sanitisers.extend(sink.sanitisers)
 
-    sanitisers_in_file = list()
+    sanitisers_in_file = []
     for sanitiser in sanitisers:
-        for cfg_node in cfg.nodes:
-            if sanitiser in cfg_node.label:
-                sanitisers_in_file.append(Sanitiser(sanitiser, cfg_node))
-
-    sanitiser_node_dict = dict()
-    for sanitiser in sanitisers:
-        sanitiser_node_dict[sanitiser] = list(
-            find_sanitiser_nodes(sanitiser, sanitisers_in_file)
+        sanitisers_in_file.extend(
+            Sanitiser(sanitiser, cfg_node)
+            for cfg_node in cfg.nodes
+            if sanitiser in cfg_node.label
         )
-    return sanitiser_node_dict
+
+    return {
+        sanitiser: list(find_sanitiser_nodes(sanitiser, sanitisers_in_file))
+        for sanitiser in sanitisers
+    }
 
 
 def find_sanitiser_nodes(sanitiser, sanitisers_in_file):
@@ -219,9 +222,8 @@ def get_sink_args_which_propagate(sink, ast_node):
         kwarg = sink.trigger.get_kwarg_from_position(i)
         if kwarg:
             kwargs_present.add(kwarg)
-        if sink.trigger.kwarg_propagates(kwarg):
-            if kwarg == "text" and vars:
-                sink_args.extend(vars)
+        if sink.trigger.kwarg_propagates(kwarg) and kwarg == "text" and vars:
+            sink_args.extend(vars)
     for keyword, vars in sink_args_with_positions.kwargs.items():
         kwargs_present.add(keyword)
         if sink.trigger.kwarg_propagates(keyword):
@@ -284,7 +286,7 @@ def how_vulnerable(
     Returns:
         A VulnerabilityType depending on how vulnerable the chain is.
     """
-    for i, current_node in enumerate(chain):
+    for current_node in chain:
         if current_node in sanitiser_nodes:
             vuln_deets["sanitiser"] = current_node
             vuln_deets["confident"] = True
@@ -368,12 +370,8 @@ def get_vulnerability(source, sink, triggers, lattice, cfg, blackbox_mapping):
     )
     if not tainted_node_in_sink_arg:
         return None
-    source_type = ""
-    sink_type = ""
-    if hasattr(source, "source_type"):
-        source_type = source.source_type
-    if hasattr(sink, "sink_type"):
-        sink_type = sink.sink_type
+    source_type = source.source_type if hasattr(source, "source_type") else ""
+    sink_type = sink.sink_type if hasattr(sink, "sink_type") else ""
     vuln_deets = {
         "source": source.cfg_node,
         "source_trigger_word": source.trigger_word,
@@ -422,47 +420,52 @@ def is_over_taint(source, sink, blackbox_mapping):
     source_type = source.source_type
     sink_type = sink.sink_type
     if sink_type == "Logging":
-        log_match = False
-        for word in sensitive_data_list:
-            if (
+        log_match = any(
+            (
                 f" {word.upper()}" in source_cfg.label.upper()
                 or f"{word.upper()} " in source_cfg.label.upper()
                 or f"{word.upper()}," in source_cfg.label.upper()
                 or f",{word.upper()}" in source_cfg.label.upper()
                 or f"({word.upper()}" in source_cfg.label.upper()
                 or "{" + word.upper() in source_cfg.label.upper()
-            ):
-                log_match = True
-                break
-        if log_match:
-            # Ignore vulnerabilities with acceptable log levels
-            for log_level in sensitive_allowed_log_levels:
-                if log_level in sink.trigger_word.lower():
-                    return True
-        else:
+            )
+            for word in sensitive_data_list
+        )
+
+        if not log_match:
             return True
+        # Ignore vulnerabilities with acceptable log levels
+        for log_level in sensitive_allowed_log_levels:
+            if log_level in sink.trigger_word.lower():
+                return True
     # render method based on Framework_Parameter is a known FP
-    if sink_type == "ReturnedToUser":
-        if sink.trigger_word == "render(" and source_type == "Framework_Parameter":
-            return True
+    if (
+        sink_type == "ReturnedToUser"
+        and sink.trigger_word == "render("
+        and source_type == "Framework_Parameter"
+    ):
+        return True
     # Ignore NoSQLi that use parameters
     if sink_type == "NoSQL" and sink_cfg.label and "parameters" in sink_cfg.label:
         return True
     # Ignore SQLi that use parameters
-    if sink_type == "SQL" and sink_cfg.label:
-        # Ignore proper parameterization. Workaround that will be removed at some point
-        if (
-            ":" + source_cfg.label in sink_cfg.label
-            or "[" + source_cfg.label in sink_cfg.label
-            or source_cfg.label + ")s" in sink_cfg.label
-            or (", (" in sink_cfg.label and source_cfg.label + "))" in sink_cfg.label)
-            or source_cfg.label + ")d" in sink_cfg.label
-            or source_cfg.label + "=" in sink_cfg.label
-            or source_cfg.label + ")f" in sink_cfg.label
-            or "%(" + source_cfg.label in sink_cfg.label
+    if (
+        sink_type == "SQL"
+        and sink_cfg.label
+        and (
+            f":{source_cfg.label}" in sink_cfg.label
+            or f"[{source_cfg.label}" in sink_cfg.label
+            or f"{source_cfg.label})s" in sink_cfg.label
+            or ", (" in sink_cfg.label
+            and f"{source_cfg.label}))" in sink_cfg.label
+            or f"{source_cfg.label})d" in sink_cfg.label
+            or f"{source_cfg.label}=" in sink_cfg.label
+            or f"{source_cfg.label})f" in sink_cfg.label
+            or f"%({source_cfg.label}" in sink_cfg.label
             or "param" in sink_cfg.label
-        ):
-            return True
+        )
+    ):
+        return True
     # Trim idor
     if (
         sink_type == "PrivateRef"
@@ -493,10 +496,9 @@ def find_vulnerabilities_in_cfg(
     triggers = identify_triggers(cfg, definitions.sources, definitions.sinks, lattice)
     for sink in triggers.sinks:
         for source in triggers.sources:
-            vulnerability = get_vulnerability(
+            if vulnerability := get_vulnerability(
                 source, sink, triggers, lattice, cfg, blackbox_mapping
-            )
-            if vulnerability:
+            ):
                 vulnerabilities_list.append(vulnerability)
 
 
@@ -514,7 +516,7 @@ def find_vulnerabilities(
     Returns:
         A list of vulnerabilities.
     """
-    vulnerabilities = list()
+    vulnerabilities = []
     definitions = parse(sources_and_sinks_file)
     with open(blackbox_mapping_file) as infile:
         blackbox_mapping = json.load(infile)

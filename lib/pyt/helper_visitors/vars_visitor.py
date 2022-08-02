@@ -6,7 +6,7 @@ from lib.pyt.core.ast_helper import get_call_names
 
 class VarsVisitor(ast.NodeVisitor):
     def __init__(self):
-        self.result = list()
+        self.result = []
 
     def visit_Name(self, node):
         self.result.append(node.id)
@@ -89,13 +89,13 @@ class VarsVisitor(ast.NodeVisitor):
             if isinstance(arg, ast.Call):
                 if isinstance(arg.func, ast.Name):
                     # We can't just visit because we need to add 'ret_'
-                    self.result.append("ret_" + arg.func.id)
+                    self.result.append(f"ret_{arg.func.id}")
                 elif isinstance(arg.func, ast.Attribute):
                     # e.g. html.replace('{{ param }}', param)
                     # func.attr is replace
                     # func.value.id is html
                     # We want replace
-                    self.result.append("ret_" + arg.func.attr)
+                    self.result.append(f"ret_{arg.func.attr}")
                 elif isinstance(arg.func, ast.Call):
                     self.visit_curried_call_inside_call_args(arg)
                 else:
@@ -111,9 +111,9 @@ class VarsVisitor(ast.NodeVisitor):
         while isinstance(curried_func, ast.Call):
             curried_func = curried_func.func
         if isinstance(curried_func, ast.Name):
-            self.result.append("ret_" + curried_func.id)
+            self.result.append(f"ret_{curried_func.id}")
         elif isinstance(curried_func, ast.Attribute):
-            self.result.append("ret_" + curried_func.attr)
+            self.result.append(f"ret_{curried_func.attr}")
 
         # Visit all arguments except a (ignore the curried function g)
         not_curried = inner_call

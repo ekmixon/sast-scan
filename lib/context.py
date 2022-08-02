@@ -64,10 +64,10 @@ def find_repo_details(src_dir=None):
         # Some CI such as GitHub pass only the slug instead of the full url :(
         if not gitProvider or not ciProvider:
             if key.startswith("GITHUB_"):
-                if key == "GITHUB_REPOSITORY":
-                    gitProvider = "github"
                 if key == "GITHUB_ACTION":
                     ciProvider = "github"
+                elif key == "GITHUB_REPOSITORY":
+                    gitProvider = "github"
             elif key.startswith("GITLAB_"):
                 gitProvider = "gitlab"
                 if key == "GITLAB_CI":
@@ -86,33 +86,28 @@ def find_repo_details(src_dir=None):
                 ciProvider = "azure"
             elif key.startswith("JENKINS_"):
                 ciProvider = "jenkins"
-        if not repositoryName:
-            if key in [
-                "BUILD_REPOSITORY_NAME",
-                "GITHUB_REPOSITORY",
-                "BITBUCKET_REPO_SLUG",
-                "REPO_NAME",
-                "CIRCLE_PROJECT_REPONAME",
-                "TRAVIS_REPO_SLUG",
-                "CI_PROJECT_NAME",
-            ]:
-                if "/" in value:
-                    repositoryName = value.split("/")[-1]
-                else:
-                    repositoryName = value
-        if not repositoryUri:
-            if key in [
-                "REPOSITORY_URL",
-                "BUILD_REPOSITORY_URI",
-                "GITHUB_REPOSITORY",
-                "BITBUCKET_GIT_HTTP_ORIGIN",
-                "REPO_NAME",
-                "CIRCLE_REPOSITORY_URL",
-                "TRAVIS_REPO_SLUG",
-                "CODEBUILD_SOURCE_REPO_URL",
-                "CI_REPOSITORY_URL",
-            ]:
-                repositoryUri = value
+        if not repositoryName and key in [
+            "BUILD_REPOSITORY_NAME",
+            "GITHUB_REPOSITORY",
+            "BITBUCKET_REPO_SLUG",
+            "REPO_NAME",
+            "CIRCLE_PROJECT_REPONAME",
+            "TRAVIS_REPO_SLUG",
+            "CI_PROJECT_NAME",
+        ]:
+            repositoryName = value.split("/")[-1] if "/" in value else value
+        if not repositoryUri and key in [
+            "REPOSITORY_URL",
+            "BUILD_REPOSITORY_URI",
+            "GITHUB_REPOSITORY",
+            "BITBUCKET_GIT_HTTP_ORIGIN",
+            "REPO_NAME",
+            "CIRCLE_REPOSITORY_URL",
+            "TRAVIS_REPO_SLUG",
+            "CODEBUILD_SOURCE_REPO_URL",
+            "CI_REPOSITORY_URL",
+        ]:
+            repositoryUri = value
         if key in [
             "COMMIT_SHA",
             "BUILD_SOURCEVERSION",
@@ -156,11 +151,13 @@ def find_repo_details(src_dir=None):
                 revisionId = head.commit.hexsha
             if not repositoryUri:
                 repositoryUri = next(iter(repo.remote().urls))
-            if not invokedBy or "@" not in invokedBy:
-                if head and head.commit.author and head.commit.author.email:
-                    invokedBy = "{} <{}>".format(
-                        head.commit.author.name, head.commit.author.email
-                    )
+            if (
+                (not invokedBy or "@" not in invokedBy)
+                and head
+                and head.commit.author
+                and head.commit.author.email
+            ):
+                invokedBy = f"{head.commit.author.name} <{head.commit.author.email}>"
         except Exception:
             LOG.debug("Unable to find repo details from the local repository")
     if branch.startswith("refs/pull"):
@@ -182,9 +179,8 @@ def find_repo_details(src_dir=None):
             if repositoryUri.startswith(pref):
                 repo_slug = False
                 break
-        if not repo_slug:
-            if "vs-ssh" in repositoryUri:
-                repo_slug = False
+        if not repo_slug and "vs-ssh" in repositoryUri:
+            repo_slug = False
         # For repo slug just assume github for now
         if repo_slug:
             repositoryUri = githubServerUrl + repositoryUri
@@ -201,9 +197,9 @@ def find_repo_details(src_dir=None):
             gitProvider = "azure"
             if not ciProvider:
                 ciProvider = "azure"
-        if not gitProvider and "tfs" in repositoryUri:
-            gitProvider = "tfs"
-            ciProvider = "tfs"
+    if not gitProvider and "tfs" in repositoryUri:
+        gitProvider = "tfs"
+        ciProvider = "tfs"
     return {
         "gitProvider": gitProvider,
         "ciProvider": ciProvider,
@@ -227,9 +223,7 @@ def sanitize_url(url):
     result = urlparse(url)
     username = result.username
     password = result.password
-    sens_str = ""
-    if username and password:
-        sens_str = "{}:{}@".format(username, password)
+    sens_str = f"{username}:{password}@" if username and password else ""
     url = url.replace(sens_str, "")
     if password:
         url = url.replace(password, "")
@@ -243,7 +237,4 @@ def is_bot(invokedBy):
     :param invokedBy: Invoking user (str)
     :return: True if bot user. False otherwise.
     """
-    for bu in known_bot_users:
-        if bu in invokedBy:
-            return True
-    return False
+    return any(bu in invokedBy for bu in known_bot_users)

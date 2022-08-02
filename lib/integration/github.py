@@ -69,8 +69,7 @@ class GitHub(GitProvider):
         repo = g.get_repo(repoFullname)
         total_count = len(findings)
         target_url = "https://slscan.io"
-        runID = github_context.get("runID")
-        if runID:
+        if runID := github_context.get("runID"):
             target_url = f"{serverUrl}/{repoFullname}/actions/runs/{runID}"
         repo.get_commit(revisionId).create_status(
             state="success",
@@ -87,8 +86,11 @@ class GitHub(GitProvider):
         repo = g.get_repo(github_context.get("repoFullname"))
         for pr in pull_requests:
             revisionId = github_context.get("revisionId")
-            summary = "| Tool | Critical | High | Medium | Low | Status |\n"
-            summary = summary + "| ---- | ------- | ------ | ----- | ---- | ---- |\n"
+            summary = (
+                "| Tool | Critical | High | Medium | Low | Status |\n"
+                + "| ---- | ------- | ------ | ----- | ---- | ---- |\n"
+            )
+
             for rk, rv in report_summary.items():
                 status_emoji = self.to_emoji(rv.get("status"))
                 summary = f'{summary}| {rv.get("tool")} | {rv.get("critical")} | {rv.get("high")} | {rv.get("medium")} | {rv.get("low")} | {status_emoji} |\n'

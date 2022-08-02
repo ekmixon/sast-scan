@@ -187,11 +187,10 @@ class LabelVisitor(ast.NodeVisitor):
             if node.dims:
                 for d in node.dims:
                     self.visit(d)
+        elif sys.version_info.major == 3 and sys.version_info.minor == 9:
+            self.visit(node)
         else:
-            if sys.version_info.major == 3 and sys.version_info.minor == 9:
-                self.visit(node)
-            else:
-                self.visit(node.value)
+            self.visit(node.value)
 
     #  operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv
     def visit_Add(self, node):

@@ -88,70 +88,60 @@ def fetch_findings(app_name, version, report_fname):
         sl_org_token = config.get("SHIFTLEFT_API_TOKEN")
     findings_api = config.get("SHIFTLEFT_VULN_API")
     findings_list = []
-    if sl_org and sl_org_token:
-        findings_api = findings_api % dict(
-            sl_org=sl_org, app_name=app_name, version=version
-        )
-        query_obj = {
-            "query": {
-                "returnRuntimeData": False,
-                "orderByDirection": "VULNERABILITY_ORDER_DIRECTION_DESC",
-            }
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + sl_org_token,
-        }
-        try:
-            r = requests.post(findings_api, headers=headers, json=query_obj)
-            if r.status_code == 200:
-                findings_data = r.json()
-                if findings_data:
-                    findings_list += findings_data.get("vulnerabilities", [])
-                    nextPageBookmark = findings_data.get("nextPageBookmark")
-                    # Recurse and fetch all pages
-                    while nextPageBookmark:
-                        LOG.debug("Retrieving findings from next page")
-                        r = requests.post(
-                            findings_api,
-                            headers=headers,
-                            json={"pageBookmark": nextPageBookmark},
-                        )
-                        if r.status_code == 200:
-                            findings_data = r.json()
-                            if findings_data:
-                                findings_list += findings_data.get(
-                                    "vulnerabilities", []
-                                )
-                                nextPageBookmark = findings_data.get("nextPageBookmark")
-                            else:
-                                nextPageBookmark = None
-                    with open(report_fname, mode="w") as rp:
-                        json.dump({"vulnerabilities": findings_list}, rp)
-                        LOG.debug(
-                            "Data written to {}, {}".format(
-                                report_fname, len(findings_list)
-                            )
-                        )
-                return findings_list
-            else:
-                if not findings_list:
-                    LOG.warning(
-                        "Unable to retrieve any findings from NG SAST Cloud. Status {}".format(
-                            r.status_code
-                        )
-                    )
-                else:
-                    LOG.debug(
-                        "Unable to retrieve some findings from NG SAST Cloud. Proceeding with partial list. Status {}".format(
-                            r.status_code
-                        )
-                    )
-                return findings_list
-        except Exception as e:
-            LOG.error(e)
-    else:
+    if not sl_org or not sl_org_token:
         return findings_list
+    findings_api = findings_api % dict(
+        sl_org=sl_org, app_name=app_name, version=version
+    )
+    query_obj = {
+        "query": {
+            "returnRuntimeData": False,
+            "orderByDirection": "VULNERABILITY_ORDER_DIRECTION_DESC",
+        }
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {sl_org_token}",
+    }
+
+    try:
+        r = requests.post(findings_api, headers=headers, json=query_obj)
+        if r.status_code == 200:
+            if findings_data := r.json():
+                findings_list += findings_data.get("vulnerabilities", [])
+                nextPageBookmark = findings_data.get("nextPageBookmark")
+                    # Recurse and fetch all pages
+                while nextPageBookmark:
+                    LOG.debug("Retrieving findings from next page")
+                    r = requests.post(
+                        findings_api,
+                        headers=headers,
+                        json={"pageBookmark": nextPageBookmark},
+                    )
+                    if r.status_code == 200:
+                        if findings_data := r.json():
+                            findings_list += findings_data.get(
+                                "vulnerabilities", []
+                            )
+                            nextPageBookmark = findings_data.get("nextPageBookmark")
+                        else:
+                            nextPageBookmark = None
+                with open(report_fname, mode="w") as rp:
+                    json.dump({"vulnerabilities": findings_list}, rp)
+                    LOG.debug(f"Data written to {report_fname}, {len(findings_list)}")
+        elif findings_list:
+            LOG.debug(
+                f"Unable to retrieve some findings from NG SAST Cloud. Proceeding with partial list. Status {r.status_code}"
+            )
+
+        else:
+            LOG.warning(
+                f"Unable to retrieve any findings from NG SAST Cloud. Status {r.status_code}"
+            )
+
+        return findings_list
+    except Exception as e:
+        LOG.error(e)
 
 
 def find_app_name(src, repo_context):
@@ -167,9 +157,7 @@ def find_app_name(src, repo_context):
         app_name = config.get("SHIFTLEFT_APP", repo_context.get("repositoryName"))
     if not app_name:
         app_name = os.path.dirname(src)
-    if app_name == "/":
-        return None
-    return app_name
+    return None if app_name == "/" else app_name
 
 
 def inspect_scan(language, src, reports_dir, convert, repo_context):
@@ -214,7 +202,7 @@ def inspect_scan(language, src, reports_dir, convert, repo_context):
             analyze_files = utils.find_csharp_artifacts(src)
             cpg_mode = True
         else:
-            if language == "ts" or language == "nodejs":
+            if language in ["ts", "nodejs"]:
                 language = "js"
                 extra_args = ["--", "--ts", "--babel"]
             analyze_files = [src]
@@ -235,13 +223,14 @@ def inspect_scan(language, src, reports_dir, convert, repo_context):
         "analyze",
         "--wait",
         "--cpg" if cpg_mode else None,
-        "--" + language,
+        f"--{language}",
         "--tag",
-        "branch=" + branch,
+        f"branch={branch}",
         "--app",
         app_name,
+        analyze_files,
     ]
-    sl_args.append(analyze_files)
+
     if extra_args:
         sl_args += extra_args
     sl_args = [arg for arg in sl_args if arg is not None]
@@ -279,9 +268,7 @@ def convert_to_findings(src_dir, repo_context, reports_dir, sarif_files):
     findings_fname = utils.get_report_file(
         "ngsast", reports_dir, True, ext_name="findings.json"
     )
-    # Exclude any ng sast sarif files
-    sarif_files = [f for f in sarif_files if "ng-sast" not in f]
-    if sarif_files:
+    if sarif_files := [f for f in sarif_files if "ng-sast" not in f]:
         convert_sarif(app_name, repo_context, sarif_files, findings_fname)
         return findings_fname
     return None
@@ -296,7 +283,7 @@ def convert_severity(severity):
     severity = severity.lower()
     if severity == "critical":
         return "critical"
-    elif severity == "high" or severity == "medium":
+    elif severity in ["high", "medium"]:
         return "moderate"
     return "info"
 

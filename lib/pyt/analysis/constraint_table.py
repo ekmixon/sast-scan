@@ -2,7 +2,8 @@
 
 Uses cfg node as key and operates on bitvectors in the form of ints."""
 
-constraint_table = dict()
+
+constraint_table = {}
 
 
 def initialize_constraint_table(cfg_list):

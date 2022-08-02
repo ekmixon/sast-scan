@@ -174,9 +174,7 @@ def get_as_list(ast_list):
     if not ast_list:
         return ret
     if isinstance(ast_list, (ast.List, ast.Tuple)):
-        for li in ast_list.elts:
-            if isinstance(li, ast.Constant):
-                ret.append(li.value)
+        ret.extend(li.value for li in ast_list.elts if isinstance(li, ast.Constant))
     return ret
 
 
@@ -242,10 +240,7 @@ def has_import(module_name, ast_tree):
 def has_method_call(pattern, ast_tree):
     pat = prepare_pattern(pattern)
     node_list = _get_matches(pat, ast_tree)
-    for node in node_list:
-        if isinstance(node, ast.Call):
-            return True
-    return False
+    return any(isinstance(node, ast.Call) for node in node_list)
 
 
 def get_method_as_dict(pattern, ast_tree):
@@ -279,8 +274,7 @@ def decode_bytes(value):
 
 def ast2dict(node):
     assert isinstance(node, AST)
-    to_return = dict()
-    to_return["_type"] = node.__class__.__name__
+    to_return = {"_type": node.__class__.__name__}
     for attr in dir(node):
         if attr.startswith("_"):
             continue
@@ -325,7 +319,7 @@ class Arguments:
         self.defaults = args.defaults
         self.kw_defaults = args.kw_defaults
 
-        self.arguments = list()
+        self.arguments = []
         if self.args:
             self.arguments.extend([x.arg for x in self.args])
         if self.varargs:

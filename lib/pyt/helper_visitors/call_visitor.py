@@ -32,7 +32,7 @@ class CallVisitor(ast.NodeVisitor):
 
     def visit_Call(self, call_node):
         func_name = get_call_names_as_string(call_node.func)
-        trigger_re = r"(^|\.){}$".format(re.escape(self._trigger_str))
+        trigger_re = f"(^|\.){re.escape(self._trigger_str)}$"
         if re.search(trigger_re, func_name):
             seen_starred = False
             for index, arg in enumerate(call_node.args):

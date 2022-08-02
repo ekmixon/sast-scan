@@ -35,9 +35,8 @@ class Sink:
         self.sanitisers = sanitisers or []
         self.arg_list_propagates = not unlisted_args_propagate
 
-        if trigger[-1] != "(":
-            if self.arg_list_propagates or arg_dict:
-                return
+        if trigger[-1] != "(" and (self.arg_list_propagates or arg_dict):
+            return
 
         arg_dict = {} if arg_dict is None else arg_dict
         self.arg_position_to_kwarg = {
@@ -63,15 +62,11 @@ class Sink:
 
     @property
     def all_arguments_propagate_taint(self):
-        if self.kwarg_list:
-            return False
-        return True
+        return not self.kwarg_list
 
     @property
     def call(self):
-        if self._trigger[-1] == "(":
-            return self._trigger[:-1]
-        return None
+        return self._trigger[:-1] if self._trigger[-1] == "(" else None
 
     @property
     def trigger_word(self):
@@ -93,11 +88,13 @@ def parse(trigger_word_file):
     sources = []
     sinks = []
     for st, sv in triggers_dict["sources"].items():
-        for tw in sv:
-            sources.append(Source(tw, st))
+        sources.extend(Source(tw, st) for tw in sv)
     for sink_type, trigger_obj in triggers_dict["sinks"].items():
-        for trigger, data in trigger_obj.items():
-            sinks.append(Sink.from_json(sink_type, trigger, data))
+        sinks.extend(
+            Sink.from_json(sink_type, trigger, data)
+            for trigger, data in trigger_obj.items()
+        )
+
     return Definitions(sources, sinks)
 
 
@@ -109,18 +106,16 @@ def parse_rules(taint_config_file):
     """
     with open(taint_config_file, mode="r", encoding="utf-8") as fd:
         taints_dict = json.load(fd)
-    rules = []
-    for r in taints_dict.get("rules"):
-        rules.append(
-            Rule(
-                r["name"],
-                r["code"],
-                r["severity"],
-                r["cwe_category"],
-                r["owasp_category"],
-                r["sources"],
-                r["sinks"],
-                r["message_format"],
-            )
+    return [
+        Rule(
+            r["name"],
+            r["code"],
+            r["severity"],
+            r["cwe_category"],
+            r["owasp_category"],
+            r["sources"],
+            r["sinks"],
+            r["message_format"],
         )
-    return rules
+        for r in taints_dict.get("rules")
+    ]

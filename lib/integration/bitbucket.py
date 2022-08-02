@@ -47,13 +47,11 @@ class Bitbucket(GitProvider):
 
     def get_reports_url(self, repo_context):
         context = self.get_context(repo_context)
-        url = f"http://api.bitbucket.org/2.0/repositories/{context.get('repoFullname')}/commit/{context.get('revisionId')}/reports/shiftleft-scan"
-        return url
+        return f"http://api.bitbucket.org/2.0/repositories/{context.get('repoFullname')}/commit/{context.get('revisionId')}/reports/shiftleft-scan"
 
     def get_pr_comments_url(self, repo_context):
         context = self.get_context(repo_context)
-        url = f"https://api.bitbucket.org/2.0/repositories/{context.get('repoFullname')}/pullrequests/{context.get('prID')}/comments"
-        return url
+        return f"https://api.bitbucket.org/2.0/repositories/{context.get('repoFullname')}/pullrequests/{context.get('prID')}/comments"
 
     def convert_severity(self, severity):
         """Convert scan severity to Bitbucket insights"""
@@ -76,10 +74,11 @@ class Bitbucket(GitProvider):
                 context = self.get_context(repo_context)
                 # Leave a comment on the pull request
                 if context.get("prID") and context.get("bitbucketToken"):
-                    summary = "| Tool | Critical | High | Medium | Low | Status |\n"
                     summary = (
-                        summary + "| ---- | ------- | ------ | ----- | ---- | ---- |\n"
+                        "| Tool | Critical | High | Medium | Low | Status |\n"
+                        + "| ---- | ------- | ------ | ----- | ---- | ---- |\n"
                     )
+
                     for rk, rv in report_summary.items():
                         status_emoji = self.to_emoji(rv.get("status"))
                         summary = f'{summary}| {rv.get("tool")} | {rv.get("critical")} | {rv.get("high")} | {rv.get("medium")} | {rv.get("low")} | {status_emoji} |\n'
@@ -139,14 +138,15 @@ class Bitbucket(GitProvider):
                         "value": build_status != "fail",
                     },
                 ]
-                for rk, rv in report_summary.items():
-                    data_list.append(
-                        {
-                            "title": rv.get("tool"),
-                            "type": "TEXT",
-                            "value": rv.get("status"),
-                        }
-                    )
+                data_list.extend(
+                    {
+                        "title": rv.get("tool"),
+                        "type": "TEXT",
+                        "value": rv.get("status"),
+                    }
+                    for rk, rv in report_summary.items()
+                )
+
                 scan_id = config.get("run_uuid", "001")
                 # Create a PR report based on the total findings
                 rr = requests.put(
@@ -176,10 +176,8 @@ class Bitbucket(GitProvider):
                         if f.get("details"):
                             fileName = f.get("details", {}).get("fileName")
                             lineNumber = f.get("details", {}).get("lineNumber")
-                        workspace = utils.get_workspace(repo_context)
-                        # Remove the workspace
-                        if workspace:
-                            workspace = workspace + "/"
+                        if workspace := utils.get_workspace(repo_context):
+                            workspace = f"{workspace}/"
                             fileName = fileName.replace(workspace, "")
                         # Cleanup title and description
                         title = f.get("title")

@@ -30,12 +30,11 @@ class FrameworkAdaptor:
             definition.module_definitions,
         )
 
-        args = Arguments(definition.node.args)
-        if args:
+        if args := Arguments(definition.node.args):
             function_entry_node = func_cfg.nodes[0]
-            function_entry_node.outgoing = list()
+            function_entry_node.outgoing = []
             first_node_after_args = func_cfg.nodes[1]
-            first_node_after_args.ingoing = list()
+            first_node_after_args.ingoing = []
 
             # We are just going to give all the tainted args the lineno of the def
             definition_lineno = definition.node.lineno
@@ -73,7 +72,7 @@ class FrameworkAdaptor:
 
     def run(self):
         """Run find_route_functions_taint_args on each CFG."""
-        function_cfgs = list()
+        function_cfgs = []
         # for _ in self.cfg_list:
         function_cfgs.extend(self.find_route_functions_taint_args())
         self.cfg_list.extend(function_cfgs)

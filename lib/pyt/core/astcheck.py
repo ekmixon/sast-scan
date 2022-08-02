@@ -82,12 +82,12 @@ class listmiddle(object):
 
     def __radd__(self, other):
         if not isinstance(other, list):
-            raise TypeError("Cannot add {} and listmiddle objects".format(type(other)))
+            raise TypeError(f"Cannot add {type(other)} and listmiddle objects")
         return listmiddle(other + self.front, self.back)
 
     def __add__(self, other):
         if not isinstance(other, list):
-            raise TypeError("Cannot add listmiddle and {} objects".format(type(other)))
+            raise TypeError(f"Cannot add listmiddle and {type(other)} objects")
         return listmiddle(self.front, self.back + other)
 
     def __call__(self, sample_list, path):
@@ -112,7 +112,7 @@ def format_path(path):
         if isinstance(part, int):
             formed.append("[%d]" % part)
         else:
-            formed.append("." + part)
+            formed.append(f".{part}")
     return "".join(formed)
 
 
@@ -125,9 +125,7 @@ class ASTMismatch(AssertionError):
         self.got = got
 
     def __str__(self):
-        return ("Mismatch at {}.\n" "Found   : {}\n" "Expected: {}").format(
-            format_path(self.path), self.got, self.expected
-        )
+        return f"Mismatch at {format_path(self.path)}.\nFound   : {self.got}\nExpected: {self.expected}"
 
 
 class ASTNodeTypeMismatch(ASTMismatch):
@@ -139,18 +137,14 @@ class ASTNodeTypeMismatch(ASTMismatch):
             if isinstance(self.expected, ast.AST)
             else self.expected
         )
-        return "At {}, found {} node instead of {}".format(
-            format_path(self.path), type(self.got).__name__, expected
-        )
+        return f"At {format_path(self.path)}, found {type(self.got).__name__} node instead of {expected}"
 
 
 class ASTNodeListMismatch(ASTMismatch):
     """A list of AST nodes had the wrong length."""
 
     def __str__(self):
-        return "At {}, found {} node(s) instead of {}".format(
-            format_path(self.path), len(self.got), len(self.expected)
-        )
+        return f"At {format_path(self.path)}, found {len(self.got)} node(s) instead of {len(self.expected)}"
 
 
 class ASTPlainListMismatch(ASTMismatch):
@@ -160,9 +154,7 @@ class ASTPlainListMismatch(ASTMismatch):
     """
 
     def __str__(self):
-        return ("At {}, lists differ.\n" "Found   : {}\n" "Expected: {}").format(
-            format_path(self.path), self.got, self.expected
-        )
+        return f"At {format_path(self.path)}, lists differ.\nFound   : {self.got}\nExpected: {self.expected}"
 
 
 class ASTPlainObjMismatch(ASTMismatch):
@@ -221,10 +213,8 @@ def assert_ast_like(sample, template, _path=None):
                 isinstance(template_field[0], ast.AST) or callable(template_field[0])
             ):
                 _check_node_list(field_path, sample_field, template_field)
-            else:
-                # List of plain values, e.g. 'global' statement names
-                if sample_field != template_field:
-                    raise ASTPlainListMismatch(field_path, sample_field, template_field)
+            elif sample_field != template_field:
+                raise ASTPlainListMismatch(field_path, sample_field, template_field)
 
         elif isinstance(template_field, ast.AST):
             assert_ast_like(sample_field, template_field, field_path)
@@ -233,10 +223,8 @@ def assert_ast_like(sample, template, _path=None):
             # Checker function
             template_field(sample_field, field_path)
 
-        else:
-            # Single value, e.g. Name.id
-            if sample_field != template_field:
-                raise ASTPlainObjMismatch(field_path, sample_field, template_field)
+        elif sample_field != template_field:
+            raise ASTPlainObjMismatch(field_path, sample_field, template_field)
 
 
 def is_ast_like(sample, template):

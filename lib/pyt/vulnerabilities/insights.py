@@ -41,10 +41,8 @@ def find_insights(ast_tree, path):
     for mods in sys.modules[__name__].__dict__.keys():
         if mods.startswith("_check"):
             try:
-                dfn = getattr(sys.modules[__name__], mods, None)
-                if dfn:
-                    violations = dfn(ast_tree, path)
-                    if violations:
+                if dfn := getattr(sys.modules[__name__], mods, None):
+                    if violations := dfn(ast_tree, path):
                         violations_list += violations
             except Exception as e:
                 LOG.debug(e)
@@ -66,9 +64,7 @@ def convert_node_source_sink(node, path):
         source_trigger = node["left_hand_side"].value
         source_label = node["left_hand_side"].value
     if hasattr(node["left_hand_side"], "kind"):
-        source_type = (
-            node["left_hand_side"].kind if node["left_hand_side"].kind else "Constant"
-        )
+        source_type = node["left_hand_side"].kind or "Constant"
     sink_line_number = ""
     sink_label = None
     sink_type = ""
@@ -86,9 +82,7 @@ def convert_node_source_sink(node, path):
         sink_trigger = ""
         sink_label = ""
     if hasattr(node["right_hand_side"], "kind"):
-        sink_type = (
-            node["right_hand_side"].kind if node["right_hand_side"].kind else "Constant"
-        )
+        sink_type = node["right_hand_side"].kind or "Constant"
     source = Source(
         source_type, str(source_trigger), source_line_number, str(source_label), path
     )
@@ -129,7 +123,7 @@ def _check_fastapi_misconfig(ast_tree, path):
                 if sink.trigger_word:
                     obfuscated_label = sink.label
                     if len(obfuscated_label) > 4:
-                        obfuscated_label = obfuscated_label[:4] + "****"
+                        obfuscated_label = f"{obfuscated_label[:4]}****"
                     violations.append(
                         Insight(
                             f"Security Misconfiguration with the config `{source.label}` set to a static value `{obfuscated_label}`",
@@ -171,13 +165,12 @@ def _check_fastapi_misconfig(ast_tree, path):
                         rules.rules_message_map["fastapi-misconfiguration-recommended"],
                     )
                 )
-            else:
-                if mid == "CORSMiddleware":
-                    cors_found = True
-        # Check for overgenerous CORS settings
+            elif mid == "CORSMiddleware":
+                cors_found = True
         if cors_found:
-            method_obj_list = get_method_as_dict("??.add_middleware(??)", ast_tree)
-            if method_obj_list:
+            if method_obj_list := get_method_as_dict(
+                "??.add_middleware(??)", ast_tree
+            ):
                 for method_obj in method_obj_list:
                     if not method_obj:
                         continue
@@ -391,14 +384,14 @@ def _check_aioredis_common_misconfig(ast_tree, path):
                 arg_value = ""
                 if kw["value"]["_type"] == "Constant":
                     arg_value = kw["value"]["value"]
-                if arg == "password" and not arg_value:
-                    return violations
-                if arg == "password" and arg_value:
+                if arg == "password":
+                    if not arg_value:
+                        return violations
                     for spe in ["%(", "{", "%s"]:
                         if spe in arg_value:
                             return violations
                     # hardcoded password
-                    if arg_value and arg_value not in [
+                    if arg_value not in [
                         "test",
                         "password",
                         "ignore",
@@ -595,9 +588,7 @@ def _check_aiohttp_common_misconfig(ast_tree, path):
                     rules.rules_message_map["aiohttp-misconfiguration-insecure"],
                 )
             )
-        # jinja check
-        uses_jinja = has_import_like("aiohttp_jinja2", ast_tree)
-        if uses_jinja:
+        if uses_jinja := has_import_like("aiohttp_jinja2", ast_tree):
             esc_dict = get_assignments_as_dict(
                 "setup_jinja(??, autoescape=False)", ast_tree
             )
@@ -654,7 +645,7 @@ def _check_django_common_misconfig(ast_tree, path):
                 if sink.trigger_word:
                     obfuscated_label = sink.label
                     if len(obfuscated_label) > 4:
-                        obfuscated_label = obfuscated_label[:4] + "****"
+                        obfuscated_label = f"{obfuscated_label[:4]}****"
                     violations.append(
                         Insight(
                             f"Security Misconfiguration with the config `{source.label}` set to a static value `{obfuscated_label}`",
@@ -941,7 +932,7 @@ def _check_flask_common_misconfig(ast_tree, path):
                 if sink.trigger_word:
                     obfuscated_label = sink.label
                     if len(obfuscated_label) > 4:
-                        obfuscated_label = obfuscated_label[:4] + "****"
+                        obfuscated_label = f"{obfuscated_label[:4]}****"
                     violations.append(
                         Insight(
                             f"Security Misconfiguration with the config `{source.label}` set to a static value `{obfuscated_label}`",
@@ -1036,12 +1027,9 @@ def _check_flask_common_misconfig(ast_tree, path):
                 )
             )
 
-        # Check for xss protection headers set to 0
-        # response.headers['X-XSS-Protection'] = '0'
-        xss_protect_dict = get_assignments_as_dict(
+        if xss_protect_dict := get_assignments_as_dict(
             "??.headers['X-XSS-Protection'] = ??", ast_tree
-        )
-        if xss_protect_dict:
+        ):
             xssh_key = xss_protect_dict.get("X-XSS-Protection").get("left_hand_side")
             xssh_value = xss_protect_dict.get("X-XSS-Protection").get("right_hand_side")
             if hasattr(xssh_value, "value") and not xssh_value.value:
@@ -1131,8 +1119,7 @@ def _check_flask_common_misconfig(ast_tree, path):
                     )
     # jwt checks
     if has_import_like("jwt", ast_tree):
-        method_obj_list = get_method_as_dict("jwt.decode(??)", ast_tree)
-        if method_obj_list:
+        if method_obj_list := get_method_as_dict("jwt.decode(??)", ast_tree):
             for method_obj in method_obj_list:
                 if not method_obj:
                     continue

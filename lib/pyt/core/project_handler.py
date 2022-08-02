@@ -2,10 +2,11 @@
 
 The module finds all python modules and generates an ast for them.
 """
+
 import os
 from functools import lru_cache
 
-_local_modules = list()
+_local_modules = []
 
 
 @lru_cache()
@@ -39,7 +40,7 @@ def get_modules(path, prepend_module_root=True):
     e.g. ('test_project.utils', 'example/test_project/utils.py')
     """
     module_root = os.path.split(path)[1]
-    modules = list()
+    modules = []
     for root, directories, filenames in os.walk(path):
         for filename in filenames:
             if _is_python_file(filename):
@@ -68,6 +69,4 @@ def get_modules(path, prepend_module_root=True):
 
 
 def _is_python_file(path):
-    if os.path.splitext(path)[1] == ".py":
-        return True
-    return False
+    return os.path.splitext(path)[1] == ".py"

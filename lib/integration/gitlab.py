@@ -24,10 +24,7 @@ from lib.logger import LOG
 
 class GitLab(GitProvider):
     def get_token(self):
-        token = config.get("GITLAB_TOKEN")
-        if not token:
-            token = config.get("MR_TOKEN")
-        return token
+        return config.get("GITLAB_TOKEN") or config.get("MR_TOKEN")
 
     def get_context(self, repo_context):
         apiUrl = os.getenv("CI_API_V4_URL")
@@ -83,10 +80,11 @@ class GitLab(GitProvider):
                         "To create a merge request note, create a personal access token with api scope and set it as GITLAB_TOKEN environment variable"
                     )
                     return
-                summary = "| Tool | Critical | High | Medium | Low | Status |\n"
                 summary = (
-                    summary + "| ---- | ------- | ------ | ----- | ---- | ---- |\n"
+                    "| Tool | Critical | High | Medium | Low | Status |\n"
+                    + "| ---- | ------- | ------ | ----- | ---- | ---- |\n"
                 )
+
                 for rk, rv in report_summary.items():
                     status_emoji = self.to_emoji(rv.get("status"))
                     summary = f'{summary}| {rv.get("tool")} | {rv.get("critical")} | {rv.get("high")} | {rv.get("medium")} | {rv.get("low")} | {status_emoji} |\n'

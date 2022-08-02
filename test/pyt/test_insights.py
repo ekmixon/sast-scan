@@ -136,11 +136,10 @@ MIDDLEWARE = [
     )
     violations = insights._check_django_common_misconfig(tree, "/tmp/settings.py")
     assert violations
-    msg_found = False
-    for v in violations:
-        if "security middleware" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any(
+        "security middleware" in v.short_description for v in violations
+    )
+
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -171,11 +170,7 @@ MIDDLEWARE = [
     )
     violations = insights._check_django_common_misconfig(tree, "/tmp/settings.py")
     assert violations
-    msg_found = False
-    for v in violations:
-        if "CSRF protection" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any("CSRF protection" in v.short_description for v in violations)
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -202,11 +197,7 @@ MIDDLEWARE_CLASSES = [
     )
     violations = insights._check_django_common_misconfig(tree, "/tmp/settings.py")
     assert violations
-    msg_found = False
-    for v in violations:
-        if "CSRF protection" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any("CSRF protection" in v.short_description for v in violations)
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -230,11 +221,7 @@ SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
     )
     violations = insights._check_django_common_misconfig(tree, "/tmp/settings.py")
     assert violations
-    msg_found = False
-    for v in violations:
-        if "signed_cookies" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any("signed_cookies" in v.short_description for v in violations)
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -259,11 +246,10 @@ DEBUG_TOOLBAR_CONFIG = {
     )
     violations = insights._check_django_common_misconfig(tree, "/tmp/settings.py")
     assert violations
-    msg_found = False
-    for v in violations:
-        if "django-debug-toolbar" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any(
+        "django-debug-toolbar" in v.short_description for v in violations
+    )
+
     assert msg_found
 
 
@@ -287,11 +273,10 @@ if __name__ == '__main__':
     )
     violations = insights._check_flask_common_misconfig(tree, None)
     assert violations
-    msg_found = False
-    for v in violations:
-        if "SESSION_COOKIE_SECURE" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any(
+        "SESSION_COOKIE_SECURE" in v.short_description for v in violations
+    )
+
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -343,11 +328,10 @@ if __name__ == '__main__':
     )
     violations = insights._check_flask_common_misconfig(tree, None)
     assert violations
-    msg_found = False
-    for v in violations:
-        if "SESSION_COOKIE_SECURE" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any(
+        "SESSION_COOKIE_SECURE" in v.short_description for v in violations
+    )
+
     assert not msg_found
 
     tree = generate_ast_from_code(
@@ -370,11 +354,10 @@ if __name__ == '__main__':
     )
     violations = insights._check_flask_common_misconfig(tree, None)
     assert violations
-    msg_found = False
-    for v in violations:
-        if "PREFERRED_URL_SCHEME" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any(
+        "PREFERRED_URL_SCHEME" in v.short_description for v in violations
+    )
+
     assert not msg_found
 
     tree = generate_ast_from_code(
@@ -398,11 +381,7 @@ if __name__ == '__main__':
     )
     violations = insights._check_flask_common_misconfig(tree, None)
     assert violations
-    msg_found = False
-    for v in violations:
-        if "XSS protection" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any("XSS protection" in v.short_description for v in violations)
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -420,11 +399,10 @@ if __name__ == '__main__':
     )
     violations = insights._check_flask_common_misconfig(tree, None)
     assert violations
-    msg_found = False
-    for v in violations:
-        if "Security Misconfiguration" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any(
+        "Security Misconfiguration" in v.short_description for v in violations
+    )
+
     assert msg_found
 
 
@@ -525,11 +503,7 @@ def authenticate(username, password):
     )
     violations = insights._check_timing_attack(tree, None)
     assert violations
-    msg_found = False
-    for v in violations:
-        if "timing attacks" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any("timing attacks" in v.short_description for v in violations)
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -542,11 +516,7 @@ def authenticate(username, token):
     )
     violations = insights._check_timing_attack(tree, None)
     assert violations
-    msg_found = False
-    for v in violations:
-        if "timing attacks" in v.short_description:
-            msg_found = True
-            break
+    msg_found = any("timing attacks" in v.short_description for v in violations)
     assert msg_found
 
 
@@ -678,10 +648,10 @@ async def main():
     )
     violations = insights._check_aioredis_common_misconfig(tree, None)
     assert len(violations) == 1
-    msg_found = False
-    for v in violations:
-        if "hardcoded password" in v.short_description:
-            msg_found = True
+    msg_found = any(
+        "hardcoded password" in v.short_description for v in violations
+    )
+
     assert msg_found
 
     tree = generate_ast_from_code(
@@ -713,10 +683,10 @@ async def main():
     )
     violations = insights._check_aioredis_common_misconfig(tree, None)
     assert len(violations) == 1
-    msg_found = False
-    for v in violations:
-        if "hardcoded password" in v.short_description:
-            msg_found = True
+    msg_found = any(
+        "hardcoded password" in v.short_description for v in violations
+    )
+
     assert msg_found
 
     tree = generate_ast_from_code(

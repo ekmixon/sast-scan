@@ -55,27 +55,25 @@ def should_suppress_output(type_str, command):
         return True
     if command in ["gitleaks"]:
         return True
-    if command in ["psalm"] and not LOG.isEnabledFor(DEBUG):
-        return True
-    return False
+    return command in ["psalm"] and not LOG.isEnabledFor(DEBUG)
 
 
 def should_convert(convert, tool_name, command, report_fname):
     """
     Method to find if sarif conversion should be performed
     """
-    if (
-        convert
-        and "init" not in tool_name
-        and (
-            config.tool_purpose_message.get(command)
-            or "audit" in tool_name
-            or "source" in tool_name
+    return bool(
+        (
+            convert
+            and "init" not in tool_name
+            and (
+                config.tool_purpose_message.get(command)
+                or "audit" in tool_name
+                or "source" in tool_name
+            )
+            and os.path.isfile(report_fname)
         )
-        and os.path.isfile(report_fname)
-    ):
-        return True
-    return False
+    )
 
 
 def exec_tool(  # scan:ignore
@@ -95,19 +93,19 @@ def exec_tool(  # scan:ignore
       CompletedProcess instance
     """
     with Progress(
-        console=console,
-        transient=True,
-        redirect_stderr=False,
-        redirect_stdout=False,
-        refresh_per_second=1,
-    ) as progress:
+            console=console,
+            transient=True,
+            redirect_stderr=False,
+            redirect_stdout=False,
+            refresh_per_second=1,
+        ) as progress:
         task = None
         try:
             env = use_java(env)
             if tool_name == "NG SAST":
                 LOG.debug("⚡︎ Performing ShiftLeft NG SAST analysis")
             else:
-                LOG.debug('⚡︎ Executing {} "{}"'.format(tool_name, " ".join(args)))
+                LOG.debug(f'⚡︎ Executing {tool_name} "{" ".join(args)}"')
             stderr = subprocess.DEVNULL
             if LOG.isEnabledFor(DEBUG):
                 stderr = subprocess.STDOUT
@@ -117,8 +115,9 @@ def exec_tool(  # scan:ignore
             elif "build" in tool_name:
                 tool_verb = "Building with"
             task = progress.add_task(
-                "[green]" + tool_verb + " " + tool_name, total=100, start=False
+                f"[green]{tool_verb} {tool_name}", total=100, start=False
             )
+
             cp = subprocess.run(
                 args,
                 stdout=stdout,
@@ -177,11 +176,10 @@ def execute_default_cmd(  # scan:ignore
     """
     # Check if there is a default command specified for the given type
     # Create the reports dir
-    report_fname_prefix = os.path.join(reports_dir, tool_name + "-report")
+    report_fname_prefix = os.path.join(reports_dir, f"{tool_name}-report")
     # Look for any additional direct arguments for the tool and inject them
-    if config.get(tool_name + "_direct_args"):
-        direct_args = config.get(tool_name + "_direct_args").split(" ")
-        if direct_args:
+    if config.get(f"{tool_name}_direct_args"):
+        if direct_args := config.get(f"{tool_name}_direct_args").split(" "):
             cmd_map_list += direct_args
     src_or_file = src
     if config.get("SHIFTLEFT_ANALYZE_FILE"):
@@ -213,7 +211,7 @@ def execute_default_cmd(  # scan:ignore
     if reports_dir and report_fname_prefix not in default_cmd:
         report_fname = report_fname_prefix + outext
         stdout = io.open(report_fname, "w", encoding="utf-8")
-        LOG.debug("Output will be written to {}".format(report_fname))
+        LOG.debug(f"Output will be written to {report_fname}")
 
     # If the command is requesting list of files then construct the argument
     filelist_prefix = "(filelist="
@@ -224,8 +222,7 @@ def execute_default_cmd(  # scan:ignore
         filelist = utils.find_files(src, ext)
         # Temporary fix for the yaml issue
         if ext == "yaml":
-            yml_list = utils.find_files(src, "yml")
-            if yml_list:
+            if yml_list := utils.find_files(src, "yml"):
                 filelist.extend(yml_list)
         delim = " "
         default_cmd = default_cmd.replace(
@@ -270,7 +267,7 @@ def execute_default_cmd(  # scan:ignore
             if not LOG.isEnabledFor(DEBUG):
                 os.remove(report_fname)
         except Exception:
-            LOG.debug("Unable to remove file {}".format(report_fname))
+            LOG.debug(f"Unable to remove file {report_fname}")
     elif type_str == "depscan":
         # Convert depscan and license scan files to html
         depscan_files = utils.find_files(reports_dir, "depscan", True)

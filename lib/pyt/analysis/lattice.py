@@ -13,8 +13,8 @@ def get_lattice_elements(cfg_nodes):
 
 class Lattice:
     def __init__(self, cfg_nodes):
-        self.el2bv = dict()  # Element to bitvector dictionary
-        self.bv2el = list()  # Bitvector to element list
+        self.el2bv = {}
+        self.bv2el = []
         for i, e in enumerate(get_lattice_elements(cfg_nodes)):
             # Give each element a unique shift of 1
             self.el2bv[e] = 0b1 << i
@@ -24,13 +24,9 @@ class Lattice:
         if number == 0:
             return []
 
-        elements = list()
         # Turn number into a binary string of length len(self.bv2el)
-        binary_string = format(number, "0" + str(len(self.bv2el)) + "b")
-        for i, bit in enumerate(binary_string):
-            if bit == "1":
-                elements.append(self.bv2el[i])
-        return elements
+        binary_string = format(number, f"0{len(self.bv2el)}b")
+        return [self.bv2el[i] for i, bit in enumerate(binary_string) if bit == "1"]
 
     def in_constraint(self, node1, node2):
         """Checks if node1 is in node2's constraints

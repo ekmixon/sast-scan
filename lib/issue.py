@@ -141,13 +141,13 @@ class Issue(object):
         """
         if not self.fname:
             return ""
-        lines = []
-        max_lines = max(max_lines, 1)
         if not self.snippet_based:
+            max_lines = max(max_lines, 1)
             lmin = max(1, self.lineno - max_lines // 2)
             lmax = lmin + len(self.linerange) + max_lines - 1
 
             tmplt = "%i\t%s" if tabbed else "%i %s"
+            lines = []
             for line in moves.xrange(lmin, lmax):
                 text = self._get_code_line(self.fname, line)
                 if isinstance(text, bytes):
@@ -159,9 +159,7 @@ class Issue(object):
             if lines:
                 return "".join(lines)
             elif self.code:
-                # Validate if the code snippet is in the right format
-                orig_lines = self.code.split("\n")
-                if orig_lines:
+                if orig_lines := self.code.split("\n"):
                     orig_first_line = orig_lines[0]
                     firstword = orig_first_line.split(" ", 1)[0]
                     if firstword and str(firstword).isdigit():
@@ -191,7 +189,7 @@ class Issue(object):
         issue_text = self.text.encode("utf-8").decode("utf-8")
         # As per the spec text sentence should end with a period
         if not issue_text.endswith("."):
-            issue_text = issue_text + "."
+            issue_text = f"{issue_text}."
         if self.test:
             # Cleanup test names
             if self.test == "blacklist":
@@ -205,13 +203,13 @@ class Issue(object):
                 if len(tmpA) < 3:
                     self.test = self.test.title()
         if self.test_id:
-            override_sev = config.rules_severity.get(str(self.test_id).upper())
-            if override_sev:
+            if override_sev := config.rules_severity.get(
+                str(self.test_id).upper()
+            ):
                 self.severity = override_sev
             # Attempt to convert the test_id to cwe id
             if config.CWEMAP.get(self.test_id):
-                cwe_id = config.CWEMAP.get(self.test_id)
-                if cwe_id:
+                if cwe_id := config.CWEMAP.get(self.test_id):
                     self.test_id = f"CWE-{cwe_id}"
                     self.test_ref_url = config.Cwe(id=cwe_id).link()
         # Take the first line as short description
@@ -248,17 +246,11 @@ class Issue(object):
         :param severity: String severity for the issue
         """
         severity = severity.upper()
-        if severity == "ERROR" or severity == "SEVERITY_HIGH_IMPACT":
+        if severity in ["ERROR", "SEVERITY_HIGH_IMPACT"]:
             return "CRITICAL"
-        if (
-            severity == "WARN"
-            or severity == "WARNING"
-            or severity == "SEVERITY_MEDIUM_IMPACT"
-        ):
+        if severity in ["WARN", "WARNING", "SEVERITY_MEDIUM_IMPACT"]:
             return "MEDIUM"
-        if severity == "INFO" or severity == "SEVERITY_LOW_IMPACT":
-            return "LOW"
-        return severity
+        return "LOW" if severity in ["INFO", "SEVERITY_LOW_IMPACT"] else severity
 
     def find_severity(self, data):
         severity = constants.SEVERITY_DEFAULT
@@ -275,7 +267,7 @@ class Issue(object):
                     severity = "MEDIUM"
                 elif sev <= 8:
                     severity = "HIGH"
-                elif sev > 8:
+                else:
                     severity = "CRITICAL"
         if "severity" in data:
             severity = str(data["severity"]).upper()
@@ -285,7 +277,6 @@ class Issue(object):
 
     def get_lineno(self, data):
         """Extract line number with any int conversion"""
-        lineno = 1
         tmp_no = 1
         if "line_number" in data:
             tmp_no = data["line_number"]
@@ -297,9 +288,7 @@ class Issue(object):
             tmp_no = data["location"]["line"]
         elif self.linerange:
             tmp_no = self.linerange[0]
-        if str(tmp_no).isdigit():
-            lineno = int(tmp_no)
-        return lineno
+        return int(tmp_no) if str(tmp_no).isdigit() else 1
 
     def get_test_id(self, data):
         """
@@ -329,13 +318,10 @@ class Issue(object):
             if isinstance(cwe_obj, str):
                 test_id = cwe_obj
             if isinstance(cwe_obj, dict):
-                tmp_id = cwe_obj.get("ID")
-                if not tmp_id:
-                    tmp_id = cwe_obj.get("id")
-                if tmp_id:
+                if tmp_id := cwe_obj.get("ID") or cwe_obj.get("id"):
                     test_id = tmp_id
             if not test_id.startswith("CWE") and test_id.isdigit():
-                test_id = "CWE-" + test_id
+                test_id = f"CWE-{test_id}"
         if not test_id and "code" in data and data.get("code"):
             if str(data.get("code")).isdigit():
                 test_id = str(data["code"])
@@ -389,15 +375,11 @@ class Issue(object):
             self.test = data["warning_type"]
         if "commitMessage" in data and "commit" in data:
             if data.get("commitMessage") == "***STAGED CHANGES***":
-                self.text = "Credential in plaintext?\n\nRule: {}, Secret: {}".format(
-                    data.get("rule"), data.get("offender")
-                )
+                self.text = f'Credential in plaintext?\n\nRule: {data.get("rule")}, Secret: {data.get("offender")}'
+
             else:
-                self.text = "Credential in plaintext?\n\nRule: {}\nLine: {}\n\nCommit: {}".format(
-                    data.get("rule", ""),
-                    data.get("line"),
-                    data.get("commit", ""),
-                )
+                self.text = f'Credential in plaintext?\n\nRule: {data.get("rule", "")}\nLine: {data.get("line")}\n\nCommit: {data.get("commit", "")}'
+
             tmplines = data.get("line", "").split("\n")
             tmplines = [li for li in tmplines if li and li.strip() != ""]
             self.code = tmplines[0]
@@ -447,18 +429,14 @@ class Issue(object):
                 tmp_code = []
                 for lc in data["code_block"]:
                     if isinstance(lc, list):
-                        if len(lc) == 2:
-                            line_str = "{} {}".format(lc[0], lc[1])
-                        else:
-                            line_str = lc[0]
+                        line_str = f"{lc[0]} {lc[1]}" if len(lc) == 2 else lc[0]
                     else:
                         line_str = lc
                     tmp_code.append(line_str)
-                max_code_lines = min(
+                if max_code_lines := min(
                     len(tmp_code), config.get("CODE_SNIPPET_MAX_LINES")
-                )
-                if max_code_lines:
-                    self.code = "\n".join(tmp_code[0:max_code_lines])
+                ):
+                    self.code = "\n".join(tmp_code[:max_code_lines])
         self.test_id = self.get_test_id(data)
         if "link" in data:
             self.test_ref_url = data["link"]

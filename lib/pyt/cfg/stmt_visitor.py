@@ -105,8 +105,8 @@ class StmtVisitor(ast.NodeVisitor):
 
         Links all statements together in a list of statements, accounting for statements with multiple last nodes.
         """
-        break_nodes = list()
-        cfg_statements = list()
+        break_nodes = []
+        cfg_statements = []
         self.prev_nodes_to_avoid.append(prev_node_to_avoid)
         self.last_control_flow_nodes.append(None)
 
@@ -136,11 +136,7 @@ class StmtVisitor(ast.NodeVisitor):
         self.last_control_flow_nodes.pop()
         if cfg_statements:
             connect_nodes(cfg_statements)
-            if first_node:
-                first_statement = first_node
-            else:
-                first_statement = get_first_statement(cfg_statements[0])
-
+            first_statement = first_node or get_first_statement(cfg_statements[0])
             last_statements = get_last_statements(cfg_statements)
             return ConnectStatements(
                 first_statement=first_statement,
@@ -151,16 +147,15 @@ class StmtVisitor(ast.NodeVisitor):
             return IgnoredNode()
 
     def get_parent_definitions(self):
-        parent_definitions = None
-        if len(self.module_definitions_stack) > 1:
-            parent_definitions = self.module_definitions_stack[-2]
-        return parent_definitions
+        return (
+            self.module_definitions_stack[-2]
+            if len(self.module_definitions_stack) > 1
+            else None
+        )
 
     def add_to_definitions(self, node):
         local_definitions = self.module_definitions_stack[-1]
-        parent_definitions = self.get_parent_definitions()
-
-        if parent_definitions:
+        if parent_definitions := self.get_parent_definitions():
             parent_qualified_name = ".".join(parent_definitions.classes + [node.name])
             parent_definition = ModuleDefinition(
                 parent_definitions,
@@ -218,7 +213,7 @@ class StmtVisitor(ast.NodeVisitor):
             if isinstance(control_flow_node, IgnoredNode):
                 return IgnoredNode()
             # Prefix the if label with 'el'
-            control_flow_node.test.label = "el" + control_flow_node.test.label
+            control_flow_node.test.label = f"el{control_flow_node.test.label}"
             if test is not None:
                 test.connect(control_flow_node.test)
             return control_flow_node.last_nodes
@@ -267,19 +262,20 @@ class StmtVisitor(ast.NodeVisitor):
         label.visit(node)
 
         this_function_name = self.function_return_stack[-1]
-        LHS = "ret_" + this_function_name
+        LHS = f"ret_{this_function_name}"
 
         if isinstance(node.value, ast.Call):
             return_value_of_call = self.visit(node.value)
             if not hasattr(return_value_of_call, "left_hand_side"):
                 return None
             return_node = ReturnNode(
-                LHS + " = " + return_value_of_call.left_hand_side,
+                f"{LHS} = {return_value_of_call.left_hand_side}",
                 LHS,
                 node,
                 [return_value_of_call.left_hand_side],
                 path=self.filenames[-1],
             )
+
             if return_value_of_call is not None:
                 return_value_of_call.connect(return_node)
             return self.append_node(return_node)
@@ -290,7 +286,7 @@ class StmtVisitor(ast.NodeVisitor):
 
         return self.append_node(
             ReturnNode(
-                LHS + " = " + label.result,
+                f"{LHS} = {label.result}",
                 LHS,
                 node,
                 rhs_visitor_result,
@@ -315,7 +311,7 @@ class StmtVisitor(ast.NodeVisitor):
         body = self.stmt_star_handler(node.body)
         body = self.handle_stmt_star_ignore_node(body, try_node)
 
-        last_statements = list()
+        last_statements = []
         for handler in node.handlers:
             try:
                 name = handler.type.id
@@ -323,12 +319,13 @@ class StmtVisitor(ast.NodeVisitor):
                 name = ""
             handler_node = self.append_node(
                 Node(
-                    "except " + name + ":",
+                    f"except {name}:",
                     handler,
                     line_number=handler.lineno,
                     path=self.filenames[-1],
                 )
             )
+
             for body_node in body.last_statements:
                 if body_node is None:
                     continue
@@ -441,7 +438,7 @@ class StmtVisitor(ast.NodeVisitor):
         )  # return the last added node
 
     def assign_multi_target(self, node, right_hand_side_variables):
-        new_assignment_nodes = list()
+        new_assignment_nodes = []
 
         for target in node.targets:
             label = LabelVisitor()
@@ -526,10 +523,9 @@ class StmtVisitor(ast.NodeVisitor):
     def visit_AnnAssign(self, node):
         if node.value is None:
             return IgnoredNode()
-        else:
-            assign = ast.Assign(targets=[node.target], value=node.value)
-            ast.copy_location(assign, node)
-            return self.visit(assign)
+        assign = ast.Assign(targets=[node.target], value=node.value)
+        ast.copy_location(assign, node)
+        return self.visit(assign)
 
     def assignment_call_node(self, left_hand_label, ast_node):
         """Handle assignments that contain a function call on its right side."""
@@ -541,7 +537,7 @@ class StmtVisitor(ast.NodeVisitor):
         call_label = call.left_hand_side
 
         call_assignment = AssignmentCallNode(
-            left_hand_label + " = " + call_label,
+            f"{left_hand_label} = {call_label}",
             left_hand_label,
             ast_node,
             [call.left_hand_side],
@@ -549,6 +545,7 @@ class StmtVisitor(ast.NodeVisitor):
             path=self.filenames[-1],
             call_node=call,
         )
+
         if call is not None:
             call.connect(call_assignment)
 
@@ -588,7 +585,7 @@ class StmtVisitor(ast.NodeVisitor):
 
         # last_nodes is used for making connections to the next node in the parent node
         # this is handled in stmt_star_handler
-        last_nodes = list()
+        last_nodes = []
         last_nodes.extend(body_connect_stmts.break_statements)
 
         if node.orelse:
@@ -604,7 +601,7 @@ class StmtVisitor(ast.NodeVisitor):
                 test
             )  # if there is no orelse, test needs an edge to the next_node
 
-        return ControlFlowNode(test, last_nodes, list())
+        return ControlFlowNode(test, last_nodes, [])
 
     def visit_For(self, node):
         self.undecided = False
@@ -616,11 +613,12 @@ class StmtVisitor(ast.NodeVisitor):
 
         for_node = self.append_node(
             Node(
-                "for " + target_label.result + " in " + iterator_label.result + ":",
+                f"for {target_label.result} in {iterator_label.result}:",
                 node,
                 path=self.filenames[-1],
             )
         )
+
 
         self.process_loop_funcs(node.iter, for_node)
 
@@ -649,8 +647,9 @@ class StmtVisitor(ast.NodeVisitor):
         label_visitor.visit(test)
 
         while_node = self.append_node(
-            Node("while " + label_visitor.result + ":", node, path=self.filenames[-1])
+            Node(f"while {label_visitor.result}:", node, path=self.filenames[-1])
         )
+
 
         if isinstance(test, ast.Compare):
             # quirk. See https://greentreesnakes.readthedocs.io/en/latest/nodes.html#Compare
@@ -663,7 +662,7 @@ class StmtVisitor(ast.NodeVisitor):
 
         return self.loop_node_skeleton(while_node, node)
 
-    def add_blackbox_or_builtin_call(self, node, blackbox):  # noqa: C901
+    def add_blackbox_or_builtin_call(self, node, blackbox):    # noqa: C901
         """Processes a blackbox or builtin function when it is called.
         Nothing gets assigned to ret_func_foo in the builtin/blackbox case.
 
@@ -703,8 +702,8 @@ class StmtVisitor(ast.NodeVisitor):
         )
 
         # Create e.g. ~call_1 = ret_func_foo
-        LHS = CALL_IDENTIFIER + "call_" + str(saved_function_call_index)
-        RHS = "ret_" + call_function_label + "("
+        LHS = f"{CALL_IDENTIFIER}call_{saved_function_call_index}"
+        RHS = f"ret_{call_function_label}("
 
         call_node = BBorBInode(
             label="",
@@ -715,8 +714,8 @@ class StmtVisitor(ast.NodeVisitor):
             path=self.filenames[-1],
             func_name=call_function_label,
         )
-        visual_args = list()
-        rhs_vars = list()
+        visual_args = []
+        rhs_vars = []
         last_return_value_of_nested_call = None
 
         for arg_node in itertools.chain(node.args, node.keywords):
@@ -745,13 +744,13 @@ class StmtVisitor(ast.NodeVisitor):
 
                 if isinstance(arg_node, ast.keyword) and arg_node.arg is not None:
                     visual_args.append(
-                        arg_node.arg + "=" + return_value_of_nested_call.left_hand_side
+                        f"{arg_node.arg}={last_return_value_of_nested_call.left_hand_side}"
                     )
-                else:
-                    if hasattr(return_value_of_nested_call, "left_hand_side"):
-                        visual_args.append(return_value_of_nested_call.left_hand_side)
-                if hasattr(return_value_of_nested_call, "left_hand_side"):
-                    rhs_vars.append(return_value_of_nested_call.left_hand_side)
+
+                elif hasattr(last_return_value_of_nested_call, "left_hand_side"):
+                    visual_args.append(last_return_value_of_nested_call.left_hand_side)
+                if hasattr(last_return_value_of_nested_call, "left_hand_side"):
+                    rhs_vars.append(last_return_value_of_nested_call.left_hand_side)
             else:
                 label = LabelVisitor()
                 label.visit(arg_node)
@@ -770,14 +769,14 @@ class StmtVisitor(ast.NodeVisitor):
             # taint is a RHS variable (self) of taint.lower()
             rhs_vars.append(call_names[0])
 
-        if len(visual_args) > 0:
+        if visual_args:
             for arg in visual_args:
                 RHS = RHS + arg + ", "
             # Replace the last ", " with a )
-            RHS = RHS[: len(RHS) - 2] + ")"
+            RHS = f"{RHS[: len(RHS) - 2]})"
         else:
-            RHS = RHS + ")"
-        call_node.label = LHS + " = " + RHS
+            RHS = f"{RHS})"
+        call_node.label = f"{LHS} = {RHS}"
 
         call_node.right_hand_side_variables = rhs_vars
         # Used in get_sink_args
@@ -819,7 +818,7 @@ class StmtVisitor(ast.NodeVisitor):
         for expr in node.targets:
             labelVisitor.visit(expr)
         return self.append_node(
-            Node("del " + labelVisitor.result, node, path=self.filenames[-1])
+            Node(f"del {labelVisitor.result}", node, path=self.filenames[-1])
         )
 
     def visit_Assert(self, node):
@@ -899,9 +898,9 @@ class StmtVisitor(ast.NodeVisitor):
         if not tree:
             return IgnoredNode()
         # module[0] is None during e.g. "from . import foo", so we must str()
-        self.nodes.append(EntryOrExitNode("Module Entry " + str(module[0])))
+        self.nodes.append(EntryOrExitNode(f"Module Entry {str(module[0])}"))
         self.visit(tree)
-        exit_node = self.append_node(EntryOrExitNode("Module Exit " + str(module[0])))
+        exit_node = self.append_node(EntryOrExitNode(f"Module Exit {str(module[0])}"))
 
         # Done analysing, pop the module off
         self.module_definitions_stack.pop()
@@ -935,10 +934,9 @@ class StmtVisitor(ast.NodeVisitor):
                         qualified_name = def_name
 
                         if from_fdid:
-                            alias = handle_fdid_aliases(
+                            if alias := handle_fdid_aliases(
                                 module_or_package_name, import_alias_mapping
-                            )
-                            if alias:
+                            ):
                                 module_or_package_name = alias
                             parent_definition = ModuleDefinition(
                                 parent_definitions,
@@ -954,15 +952,13 @@ class StmtVisitor(ast.NodeVisitor):
                                 self.filenames[-1],
                             )
                     else:
-                        qualified_name = module_or_package_name + "." + def_name
+                        qualified_name = f"{module_or_package_name}.{def_name}"
                         parent_definition = ModuleDefinition(
                             parent_definitions,
                             qualified_name,
                             parent_definitions.module_name,
                             self.filenames[-1],
                         )
-                    parent_definition.node = def_.node
-                    parent_definitions.definitions.append(parent_definition)
                 else:
                     parent_definition = ModuleDefinition(
                         parent_definitions,
@@ -970,8 +966,8 @@ class StmtVisitor(ast.NodeVisitor):
                         parent_definitions.module_name,
                         self.filenames[-1],
                     )
-                    parent_definition.node = def_.node
-                    parent_definitions.definitions.append(parent_definition)
+                parent_definition.node = def_.node
+                parent_definitions.definitions.append(parent_definition)
         return exit_node
 
     def from_directory_import(
@@ -1011,7 +1007,7 @@ class StmtVisitor(ast.NodeVisitor):
                 else:
                     continue
             else:
-                file_module = (real_name, full_name + ".py")
+                file_module = real_name, f"{full_name}.py"
                 self.add_module(
                     module=file_module,
                     module_or_package_name=real_name,
@@ -1024,8 +1020,7 @@ class StmtVisitor(ast.NodeVisitor):
     def import_package(self, module, module_name, local_name, import_alias_mapping):
         module_path = module[1]
         init_file_location = os.path.join(module_path, "__init__.py")
-        init_exists = os.path.isfile(init_file_location)
-        if init_exists:
+        if init_exists := os.path.isfile(init_file_location):
             return self.add_module(
                 module=(module[0], init_file_location),
                 module_or_package_name=module_name,
@@ -1050,8 +1045,7 @@ class StmtVisitor(ast.NodeVisitor):
             if node.module:
                 name_with_dir = os.path.join(no_file, node.module.replace(".", "/"))
                 if not os.path.isdir(name_with_dir):
-                    name_with_dir = name_with_dir + ".py"
-            # e.g. from . import X
+                    name_with_dir = f"{name_with_dir}.py"
             else:
                 name_with_dir = no_file
                 # We do not want to analyse the init file of the current directory
@@ -1060,13 +1054,12 @@ class StmtVisitor(ast.NodeVisitor):
             parent = os.path.abspath(os.path.join(no_file, os.pardir))
             if node.level > 2:
                 # Perform extra `cd ..` however many times
-                for _ in range(0, node.level - 2):
+                for _ in range(node.level - 2):
                     parent = os.path.abspath(os.path.join(parent, os.pardir))
             if node.module:
                 name_with_dir = os.path.join(parent, node.module.replace(".", "/"))
                 if not os.path.isdir(name_with_dir):
-                    name_with_dir = name_with_dir + ".py"
-            # e.g. from .. import X
+                    name_with_dir = f"{name_with_dir}.py"
             else:
                 name_with_dir = parent
 
@@ -1109,7 +1102,8 @@ class StmtVisitor(ast.NodeVisitor):
             local_definitions = self.module_definitions_stack[-1]
             local_definitions.import_alias_mapping[
                 name.asname or name.name
-            ] = "{}.{}".format(node.module, name.name)
+            ] = f"{node.module}.{name.name}"
+
         if node.module not in uninspectable_modules:
             uninspectable_modules.add(node.module)
         return IgnoredNode()
@@ -1215,7 +1209,8 @@ class StmtVisitor(ast.NodeVisitor):
             local_definitions = self.module_definitions_stack[-1]
             local_definitions.import_alias_mapping[
                 name.asname or name.name
-            ] = "{}.{}".format(node.module, name.name)
+            ] = f"{node.module}.{name.name}"
+
         if node.module not in uninspectable_modules:
             uninspectable_modules.add(node.module)
         return IgnoredNode()

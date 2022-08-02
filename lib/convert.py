@@ -67,9 +67,7 @@ def tweak_severity(tool_name, issue_dict):
         "source-php",
         "audit-php",
     ]:
-        if issue_severity in ["HIGH", "CRITICAL"]:
-            return "MEDIUM"
-        return "LOW"
+        return "MEDIUM" if issue_severity in ["HIGH", "CRITICAL"] else "LOW"
     if tool_name in [
         "checkov",
         "source-tf",
@@ -80,10 +78,7 @@ def tweak_severity(tool_name, issue_dict):
         "source-k8s",
         "source-dockerfile",
     ]:
-        cis_rule = cis.get_rule(rule_id)
-        if not cis_rule:
-            cis_rule = cis.get_rule(rule_name)
-        if cis_rule:
+        if cis_rule := cis.get_rule(rule_id) or cis.get_rule(rule_name):
             return "CRITICAL" if cis_rule.get("scored") else "HIGH"
     return issue_severity
 
@@ -201,20 +196,21 @@ def extract_from_file(
                         location_list = convert_dataflow(
                             working_dir, tool_args, vuln["dataFlow"]["dataFlow"]["list"]
                         )
-                    for location in location_list:
-                        issues.append(
-                            {
-                                "rule_id": vuln["category"],
-                                "title": vuln["title"],
-                                "description": vuln["description"],
-                                "score": vuln["score"],
-                                "severity": vuln["severity"],
-                                "line_number": location.get("line_number"),
-                                "filename": location.get("filename"),
-                                "first_found": vuln["firstVersionDetected"],
-                                "issue_confidence": "HIGH",
-                            }
-                        )
+                    issues.extend(
+                        {
+                            "rule_id": vuln["category"],
+                            "title": vuln["title"],
+                            "description": vuln["description"],
+                            "score": vuln["score"],
+                            "severity": vuln["severity"],
+                            "line_number": location.get("line_number"),
+                            "filename": location.get("filename"),
+                            "first_found": vuln["firstVersionDetected"],
+                            "issue_confidence": "HIGH",
+                        }
+                        for location in location_list
+                    )
+
             elif tool_name == "taint-php":
                 for entry in report_data:
                     taint_trace = entry.get("taint_trace")
@@ -242,17 +238,19 @@ def extract_from_file(
                 for taint in taint_list:
                     source = taint.get("source")
                     sink = taint.get("sink")
-                    tags = {}
-                    for taint_props in [
-                        "source_trigger_word",
-                        "source_label",
-                        "source_type",
-                        "sink_trigger_word",
-                        "sink_label",
-                        "sink_type",
-                    ]:
-                        if taint.get(taint_props):
-                            tags[taint_props] = taint.get(taint_props)
+                    tags = {
+                        taint_props: taint.get(taint_props)
+                        for taint_props in [
+                            "source_trigger_word",
+                            "source_label",
+                            "source_type",
+                            "sink_trigger_word",
+                            "sink_label",
+                            "sink_type",
+                        ]
+                        if taint.get(taint_props)
+                    }
+
                     issues.append(
                         {
                             "rule_id": taint.get("rule_id"),
@@ -269,14 +267,14 @@ def extract_from_file(
                             "tags": tags,
                         }
                     )
-            elif tool_name == "phpstan" or tool_name == "source-php":
+            elif tool_name in ["phpstan", "source-php"]:
                 file_errors = report_data.get("files")
                 for filename, messageobj in file_errors.items():
                     messages = messageobj.get("messages")
                     for msg in messages:
                         # Create a rule id for phpstan
                         rule_word = msg.get("message", "").split(" ")[0]
-                        rule_word = "phpstan-" + rule_word.lower()
+                        rule_word = f"phpstan-{rule_word.lower()}"
                         issues.append(
                             {
                                 "rule_id": rule_word,
@@ -327,27 +325,24 @@ def extract_from_file(
                 issues += report_data.get("errors", [])
             elif isinstance(report_data, list):
                 issues = report_data
-            else:
-                if "sec_issues" in report_data:
-                    # NodeJsScan uses sec_issues
-                    sec_data = report_data["sec_issues"]
-                    for key, value in sec_data.items():
-                        if isinstance(value, list):
-                            issues = issues + value
-                        else:
-                            issues.append(value)
-                elif "Issues" in report_data:
-                    tmpL = report_data.get("Issues", [])
-                    if tmpL:
-                        issues += tmpL
+            elif "sec_issues" in report_data:
+                # NodeJsScan uses sec_issues
+                sec_data = report_data["sec_issues"]
+                for key, value in sec_data.items():
+                    if isinstance(value, list):
+                        issues = issues + value
                     else:
-                        LOG.debug("%s produced no result" % tool_name)
-                elif "results" in report_data:
-                    tmpL = report_data.get("results", [])
-                    if tmpL:
-                        issues += tmpL
-                    else:
-                        LOG.debug("%s produced no result" % tool_name)
+                        issues.append(value)
+            elif "Issues" in report_data:
+                if tmpL := report_data.get("Issues", []):
+                    issues += tmpL
+                else:
+                    LOG.debug(f"{tool_name} produced no result")
+            elif "results" in report_data:
+                if tmpL := report_data.get("results", []):
+                    issues += tmpL
+                else:
+                    LOG.debug(f"{tool_name} produced no result")
         if extn == ".csv":
             headers, issues = csv_parser.get_report_data(rfile)
         if extn == ".xml":
@@ -598,10 +593,9 @@ def add_results(tool_name, issues, run, file_path_list=None, working_dir=None):
     total = 0
 
     for issue in issues:
-        result = create_result(
+        if result := create_result(
             tool_name, issue, rules, rule_indices, file_path_list, working_dir
-        )
-        if result:
+        ):
             run.results.append(result)
             issue_dict = issue_from_dict(issue).as_dict()
             rule_id = issue_dict.get("test_id")
@@ -617,7 +611,7 @@ def add_results(tool_name, issues, run, file_path_list=None, working_dir=None):
                 metrics[key] = 0
             metrics[key] += 1
 
-    if len(rules) > 0:
+    if rules:
         run.tool.driver.rules = list(rules.values())
 
     metrics["total"] = total
@@ -677,11 +671,11 @@ def create_result(tool_name, issue, rules, rule_indices, file_path_list, working
         if WORKSPACE_PREFIX is not None:
             # Make it relative path
             if WORKSPACE_PREFIX == "":
-                filename = re.sub(r"^" + working_dir + "/", WORKSPACE_PREFIX, filename)
+                filename = re.sub(f"^{working_dir}/", WORKSPACE_PREFIX, filename)
             elif not filename.startswith(working_dir):
                 filename = os.path.join(WORKSPACE_PREFIX, filename)
             else:
-                filename = re.sub(r"^" + working_dir, WORKSPACE_PREFIX, filename)
+                filename = re.sub(f"^{working_dir}", WORKSPACE_PREFIX, filename)
     physical_location = om.PhysicalLocation(
         artifact_location=om.ArtifactLocation(uri=to_uri(filename))
     )
@@ -698,10 +692,9 @@ def create_result(tool_name, issue, rules, rule_indices, file_path_list, working
             "scanPrimaryLocationHash": to_fingerprint_hash(snippet, HASH_DIGEST_SIZE)
         }
     if issue_dict.get("tags"):
-        tag_str = ""
-        for tk, tv in issue_dict.get("tags", {}).items():
-            tag_str += tv
-        if tag_str:
+        if tag_str := "".join(
+            tv for tk, tv in issue_dict.get("tags", {}).items()
+        ):
             fingerprint["scanTagsHash"] = to_fingerprint_hash(tag_str, HASH_DIGEST_SIZE)
     # Filename hash
     fingerprint["scanFileHash"] = to_fingerprint_hash(filename, HASH_DIGEST_SIZE)
@@ -732,12 +725,8 @@ def level_from_severity(severity):
     """Converts tool's severity to the 4 level
     suggested by SARIF
     """
-    if severity == "CRITICAL":
+    if severity in ["CRITICAL", "HIGH"]:
         return "error"
-    elif severity == "HIGH":
-        return "error"
-    elif severity == "MEDIUM":
-        return "warning"
     elif severity == "LOW":
         return "note"
     else:
@@ -763,10 +752,7 @@ def add_region_and_context_region(physical_location, line_number, code):
     if line_number == 0:
         line_number = 1
     if snippet_lines and len(snippet_lines) > index:
-        if index > 0:
-            snippet_line = snippet_lines[index]
-        else:
-            snippet_line = snippet_lines[0]
+        snippet_line = snippet_lines[index] if index > 0 else snippet_lines[0]
     if snippet_line.strip().replace("\n", "") == "":
         snippet_line = ""
     physical_location.region = om.Region(
@@ -806,8 +792,8 @@ def parse_code(code):
             snippet_lines.append(snippet_line)
 
     if not last_real_line_ends_in_newline:
-        last_line = snippet_lines[len(snippet_lines) - 1]
-        snippet_lines[len(snippet_lines) - 1] = last_line[: len(last_line) - 1]
+        last_line = snippet_lines[-1]
+        snippet_lines[-1] = last_line[:-1]
 
     return first_line_number, snippet_lines
 
@@ -830,9 +816,9 @@ def get_rule_short_description(tool_name, rule_id, test_name, issue_dict):
         return issue_dict.get("short_description")
     if test_name:
         if not test_name.endswith("."):
-            test_name = test_name + "."
+            test_name = f"{test_name}."
         return test_name
-    return "Rule {} from {}.".format(rule_id, tool_name)
+    return f"Rule {rule_id} from {tool_name}."
 
 
 def get_rule_full_description(tool_name, rule_id, test_name, issue_dict):
@@ -854,7 +840,7 @@ def get_rule_full_description(tool_name, rule_id, test_name, issue_dict):
     if issue_text:
         issue_text = issue_text.split("\n")[0]
     if not issue_text.endswith("."):
-        issue_text = issue_text + "."
+        issue_text = f"{issue_text}."
     return issue_text
 
 
@@ -873,8 +859,7 @@ def get_help(format, tool_name, rule_id, test_name, issue_dict):
         return get_description(rule_id, True)
     if issue_dict.get("cwe_category"):
         return get_description(issue_dict.get("cwe_category"), True)
-    issue_text = issue_dict.get("issue_text", "")
-    return issue_text
+    return issue_dict.get("issue_text", "")
 
 
 def get_url(tool_name, rule_id, test_name, issue_dict):
@@ -893,7 +878,7 @@ def get_url(tool_name, rule_id, test_name, issue_dict):
         return "https://cwe.mitre.org/data/definitions/%s.html" % issue_dict.get(
             "cwe_category"
         ).replace("CWE-", "")
-    return "https://slscan.io?q={}".format(rule_id)
+    return f"https://slscan.io?q={rule_id}"
 
 
 def create_or_find_rule(tool_name, issue_dict, rules, rule_indices):
@@ -965,7 +950,4 @@ def to_uri(file_path):
         pure_path = pathlib.PureWindowsPath(file_path)
     else:
         pure_path = pathlib.PurePath(file_path)
-    if pure_path.is_absolute():
-        return pure_path.as_uri()
-    else:
-        return pure_path.as_posix()  # Replace backslashes with slashes.
+    return pure_path.as_uri() if pure_path.is_absolute() else pure_path.as_posix()

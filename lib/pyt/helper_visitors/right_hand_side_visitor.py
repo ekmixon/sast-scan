@@ -9,7 +9,7 @@ class RHSVisitor(ast.NodeVisitor):
 
     def __init__(self):
         """Initialize result as list."""
-        self.result = list()
+        self.result = []
 
     def visit_Name(self, node):
         self.result.append(node.id)

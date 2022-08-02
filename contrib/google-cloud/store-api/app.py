@@ -32,8 +32,7 @@ async def handle_summary():
         if not args:
             return "Not Found", 404
         db_ref = db.collection(SUMMARY_COLLECTION)
-        id = request.args.get("id")
-        if id:
+        if id := request.args.get("id"):
             doc_ref = db_ref.document(id)
             doc = doc_ref.get()
             if doc.exists:
@@ -48,7 +47,7 @@ async def handle_summary():
         req_json = await request.get_json()
         if req_json:
             id = req_json.get("id", str(uuid.uuid4()))
-            doc_ref = db.collection(SUMMARY_COLLECTION).document("{}".format(id))
+            doc_ref = db.collection(SUMMARY_COLLECTION).document(f"{id}")
             req_json["created_at"] = datetime.now().isoformat()
             doc_ref.set(req_json, merge=True)
         return {
@@ -96,7 +95,7 @@ def process_scan_result(scan_data):
     if not scan_data:
         return False
     id = str(uuid.uuid4())
-    runs = scan_data.get("runs") if scan_data.get("runs") else [scan_data]
+    runs = scan_data.get("runs") or [scan_data]
     for arun in runs:
         # Set the guid as the document id.
         if arun.get("automationDetails"):
@@ -109,7 +108,7 @@ def process_scan_result(scan_data):
             arun["branch"] = vcs_info.get("branch")
             arun["revisionId"] = vcs_info.get("revisionId")
         arun["created_at"] = datetime.now().isoformat()
-        doc_ref = db.collection(SCANS_COLLECTION).document("{}".format(id))
+        doc_ref = db.collection(SCANS_COLLECTION).document(f"{id}")
         doc_ref.set(arun, merge=True)
     return True
 

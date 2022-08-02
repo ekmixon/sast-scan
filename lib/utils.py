@@ -51,14 +51,14 @@ def is_ignored_dir(base_dir, dir_name):
     dir_name = dir_name.lower()
     if dir_name.startswith("."):
         return True
-    elif dir_name.startswith("/" + base_dir):
-        dir_name = re.sub(r"^/" + base_dir + "/", "", dir_name)
+    elif dir_name.startswith(f"/{base_dir}"):
+        dir_name = re.sub(f"^/{base_dir}/", "", dir_name)
     elif dir_name.startswith(base_dir):
-        dir_name = re.sub(r"^" + base_dir + "/", "", dir_name)
-    for d in config.ignore_directories:
-        if dir_name == d or dir_name.startswith(d) or ("/" + d + "/") in dir_name:
-            return True
-    return False
+        dir_name = re.sub(f"^{base_dir}/", "", dir_name)
+    return any(
+        dir_name == d or dir_name.startswith(d) or f"/{d}/" in dir_name
+        for d in config.ignore_directories
+    )
 
 
 def is_ignored_file(base_dir, file_name):
@@ -74,10 +74,7 @@ def is_ignored_file(base_dir, file_name):
     extn = "".join(Path(file_name).suffixes)
     if extn in config.ignore_files or file_name in config.ignore_files:
         return True
-    for ie in config.ignore_files:
-        if file_name.endswith(ie):
-            return True
-    return False
+    return any(file_name.endswith(ie) for ie in config.ignore_files)
 
 
 def find_path_prefix(base_dir, file_name):
@@ -99,8 +96,8 @@ def find_path_prefix(base_dir, file_name):
         if not is_ignored_dir(base_dir, f.parent.name):
             ppath = f.as_posix()
             if ppath.endswith(file_path_obj.name):
-                retpath = re.sub("^" + base_dir + "/", "", ppath)
-                return retpath.replace("/" + file_name, "")
+                retpath = re.sub(f"^{base_dir}/", "", ppath)
+                return retpath.replace(f"/{file_name}", "")
     return ""
 
 
@@ -118,9 +115,7 @@ def find_python_reqfiles(path):
     for root, dirs, files in os.walk(path):
         filter_ignored_dirs(dirs)
         if not is_ignored_dir(path, root):
-            for name in req_files:
-                if name in files:
-                    result.append(os.path.join(root, name))
+            result.extend(os.path.join(root, name) for name in req_files if name in files)
     return result
 
 
@@ -137,9 +132,12 @@ def find_jar_files():
         for root, dirs, files in os.walk(path):
             filter_ignored_dirs(dirs)
             if not is_ignored_dir(path, root):
-                for file in files:
-                    if file.endswith(".jar"):
-                        result.append(os.path.join(root, file))
+                result.extend(
+                    os.path.join(root, file)
+                    for file in files
+                    if file.endswith(".jar")
+                )
+
     return result
 
 
@@ -201,10 +199,9 @@ def find_csharp_artifacts(search_dir):
     :param src: Directory to search
     :return: List of war or ear or jar files
     """
-    result = [p.as_posix() for p in Path(search_dir).rglob("*.csproj")]
-    if not result:
-        result = [p.as_posix() for p in Path(search_dir).rglob("*.sln")]
-    return result
+    return [p.as_posix() for p in Path(search_dir).rglob("*.csproj")] or [
+        p.as_posix() for p in Path(search_dir).rglob("*.sln")
+    ]
 
 
 def detect_project_type(src_dir, scan_mode):
@@ -252,13 +249,14 @@ def detect_project_type(src_dir, scan_mode):
         project_types.append("kotlin")
         depscan_supported = True
     if (
-        find_files(src_dir, "pom.xml", False, True)
-        or find_files(src_dir, ".gradle", False, True)
-        or os.environ.get("SHIFTLEFT_LANG_JAVA")
-    ):
-        if "kotlin" not in project_types:
-            project_types.append("java")
-            depscan_supported = True
+        (
+            find_files(src_dir, "pom.xml", False, True)
+            or find_files(src_dir, ".gradle", False, True)
+            or os.environ.get("SHIFTLEFT_LANG_JAVA")
+        )
+    ) and "kotlin" not in project_types:
+        project_types.append("java")
+        depscan_supported = True
     if find_files(src_dir, ".jsp", False, True):
         project_types.append("jsp")
         depscan_supported = True
@@ -336,11 +334,10 @@ def get_report_file(tool_name, reports_dir, convert, ext_name="json"):
     report_fname = ""
     if reports_dir:
         os.makedirs(reports_dir, exist_ok=True)
-        report_fname = os.path.join(reports_dir, tool_name + "-report." + ext_name)
+        return os.path.join(reports_dir, f"{tool_name}-report.{ext_name}")
     else:
         fp = tempfile.NamedTemporaryFile(delete=False)
-        report_fname = fp.name
-    return report_fname
+        return fp.name
 
 
 def get_workspace(repo_context):
@@ -354,15 +351,14 @@ def get_workspace(repo_context):
         return None
     revision = repo_context.get("revisionId", repo_context.get("branch"))
     if "github" in repo_context["repositoryUri"]:
-        return "{}/blob/{}".format(repo_context["repositoryUri"], revision)
+        return f'{repo_context["repositoryUri"]}/blob/{revision}'
     if "gitlab" in repo_context["repositoryUri"]:
-        return "{}/-/blob/{}".format(repo_context["repositoryUri"], revision)
+        return f'{repo_context["repositoryUri"]}/-/blob/{revision}'
     if "bitbucket" in repo_context["repositoryUri"] and repo_context.get("revisionId"):
-        return "{}/src/{}".format(repo_context["repositoryUri"], revision)
+        return f'{repo_context["repositoryUri"]}/src/{revision}'
     if "azure.com" in repo_context["repositoryUri"] and repo_context.get("branch"):
-        return "{}?_a=contents&version=GB{}&path=".format(
-            repo_context["repositoryUri"], repo_context.get("branch")
-        )
+        return f'{repo_context["repositoryUri"]}?_a=contents&version=GB{repo_context.get("branch")}&path='
+
     return None
 
 
@@ -376,10 +372,7 @@ def is_generic_package(filePath):
     if not filePath:
         return True
     oss_package_prefixes = ["java", "org", "microsoft"]
-    for p in oss_package_prefixes:
-        if filePath.lower().startswith(p):
-            return True
-    return False
+    return any(filePath.lower().startswith(p) for p in oss_package_prefixes)
 
 
 def check_dotnet():

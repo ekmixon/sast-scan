@@ -81,7 +81,7 @@ def _get_names(node, result):
         return _get_names(node.value, result)
     else:
         if hasattr(node, "value"):
-            return _get_names(node.value, result + "." + node.attr)
+            return _get_names(node.value, f"{result}.{node.attr}")
         else:
             return result
 
@@ -121,10 +121,8 @@ def get_first_node(node, node_not_to_step_past):
             break
         ingoing = current_node.ingoing
         current_node = current_node.ingoing[i]
-        j = j + 1
-    if ingoing:
-        return ingoing[i]
-    return current_node
+        j += 1
+    return ingoing[i] if ingoing else current_node
 
 
 def get_first_statement(node_or_tuple):
@@ -134,10 +132,7 @@ def get_first_statement(node_or_tuple):
         The first element in the tuple if it is a tuple.
         The node if it is a node.
     """
-    if isinstance(node_or_tuple, tuple):
-        return node_or_tuple[0]
-    else:
-        return node_or_tuple
+    return node_or_tuple[0] if isinstance(node_or_tuple, tuple) else node_or_tuple
 
 
 def get_last_statements(cfg_statements):

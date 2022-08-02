@@ -27,15 +27,12 @@ special_framework_path = ["management/commands"]
 
 
 def is_analyzable(src, path):
-    for d in special_framework_path:
-        if d in path:
-            return False
-    return True
+    return all(d not in path for d in special_framework_path)
 
 
 def deep_analysis(src, files):
     has_unsanitised_vulnerabilities = False
-    cfg_list = list()
+    cfg_list = []
     insights = []
     vulnerabilities = []
     framework_route_criteria = is_taintable_function
@@ -59,8 +56,7 @@ def deep_analysis(src, files):
         try:
             # Should we skip insights?
             if not os.environ.get("SKIP_INSIGHTS"):
-                violations = find_insights(tree, path)
-                if violations:
+                if violations := find_insights(tree, path):
                     insights += violations
             cfg = make_cfg(
                 tree,

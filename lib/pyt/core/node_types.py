@@ -40,8 +40,8 @@ class Node:
         else:
             self.line_number = None
         self.path = path
-        self.ingoing = list()
-        self.outgoing = list()
+        self.ingoing = []
+        self.outgoing = []
 
     def as_dict(self):
         return {
@@ -77,7 +77,7 @@ class Node:
     def __repr__(self):
         """Print a representation of the node."""
         label = " ".join(("Label: ", self.label))
-        line_number = "Line number: " + str(self.line_number)
+        line_number = f"Line number: {str(self.line_number)}"
         outgoing = ""
         ingoing = ""
         if self.ingoing:
@@ -111,7 +111,7 @@ class IfNode(Node):
         label_visitor = LabelVisitor()
         label_visitor.visit(test_node)
 
-        super().__init__("if " + label_visitor.result + ":", ast_node, path=path)
+        super().__init__(f"if {label_visitor.result}:", ast_node, path=path)
 
 
 class TryNode(Node):
@@ -246,7 +246,7 @@ class BBorBInode(AssignmentNode):
             line_number=line_number,
             path=path,
         )
-        self.args = list()
+        self.args = []
         self.inner_most_call = self
         self.func_name = func_name
 

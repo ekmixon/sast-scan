@@ -40,10 +40,7 @@ def find_tool_shortname(desc):
 
 
 def get_depscan_data(drep_file):
-    dataList = []
-    for depline in drep_file:
-        dataList.append(json.loads(depline))
-    return dataList
+    return [json.loads(depline) for depline in drep_file]
 
 
 def calculate_depscan_metrics(dep_data):
@@ -75,12 +72,10 @@ def calculate_depscan_metrics(dep_data):
                 metrics[f"{usage}_{severity}"] += 1
                 if usage == "required":
                     required_pkgs_found = True
-        # Ignore unknown severity for now
         if severity == "unknown":
             continue
-        else:
-            metrics[severity] += 1
-            metrics["total"] += 1
+        metrics[severity] += 1
+        metrics["total"] += 1
     return metrics, required_pkgs_found
 
 
@@ -167,10 +162,13 @@ def summary(
                         "required_low",
                     )
                 for rsev in build_status_categories:
-                    if build_break_rules.get("max_" + rsev) is not None:
-                        if metrics.get(rsev) > build_break_rules["max_" + rsev]:
-                            report_summary[dep_type]["status"] = ":cross_mark:"
-                            build_status = "fail"
+                    if (
+                        build_break_rules.get(f"max_{rsev}") is not None
+                        and metrics.get(rsev)
+                        > build_break_rules[f"max_{rsev}"]
+                    ):
+                        report_summary[dep_type]["status"] = ":cross_mark:"
+                        build_status = "fail"
 
     for sf in sarif_files:
         with open(sf, mode="r") as report_file:
@@ -178,7 +176,7 @@ def summary(
             existing_tool = False
             # skip this file if the data is empty
             if not report_data or not report_data.get("runs"):
-                LOG.warn("Report file {} is invalid. Skipping ...".format(sf))
+                LOG.warn(f"Report file {sf} is invalid. Skipping ...")
                 continue
             # Iterate through all the runs
             for run in report_data["runs"]:
@@ -226,23 +224,23 @@ def summary(
                 tool_rules = config.get("build_break_rules").get(tool_name, {})
                 build_break_rules = {**default_rules, **tool_rules, **override_rules}
                 for rsev in ("critical", "high", "medium", "low"):
-                    if build_break_rules.get("max_" + rsev) is not None:
-                        if (
-                            report_summary.get(tool_name).get(rsev)
-                            > build_break_rules["max_" + rsev]
-                        ):
-                            report_summary[tool_name]["status"] = ":cross_mark:"
-                            build_status = "fail"
+                    if (
+                        build_break_rules.get(f"max_{rsev}") is not None
+                        and report_summary.get(tool_name).get(rsev)
+                        > build_break_rules[f"max_{rsev}"]
+                    ):
+                        report_summary[tool_name]["status"] = ":cross_mark:"
+                        build_status = "fail"
 
     # Should we store the aggregate data
     if aggregate_file:
         # agg_sarif_file = aggregate_file.replace(".json", ".sarif")
         # aggregate.sarif_aggregate(run_data_list, agg_sarif_file)
         aggregate.jsonl_aggregate(run_data_list, aggregate_file)
-        LOG.debug("Aggregate report written to {}\n".format(aggregate_file))
+        LOG.debug(f"Aggregate report written to {aggregate_file}\n")
     if baseline_file:
         aggregate.store_baseline(baseline_fingerprints, baseline_file)
-        LOG.info("Baseline file written to {}".format(baseline_file))
+        LOG.info(f"Baseline file written to {baseline_file}")
     return report_summary, build_status
 
 
@@ -257,10 +255,11 @@ def print_table(report_summary):
             headers = v.keys()
             for h in headers:
                 justify = "left"
-                if not h == "tool":
-                    justify = "right"
                 if h == "status":
+                    justify = "right"
                     justify = "center"
+                elif h != "tool":
+                    justify = "right"
                 table.add_column(header=h.capitalize(), justify=justify)
         rv = [str(val) for val in v.values()]
         table.add_row(*rv)

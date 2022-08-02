@@ -27,9 +27,8 @@ class FixedPointAnalysis:
             if q[0] is None:
                 if none_break_cnt > max_none_runs:
                     break
-                else:
-                    none_break_cnt = none_break_cnt + 1
-                    continue
+                none_break_cnt = none_break_cnt + 1
+                continue
             cnt = cnt + 1
             x_i = constraint_table[q[0]]  # x_i = q[0].old_constraint
             self.analysis.fixpointmethod(q[0])  # y = F_i(x_1, ..., x_n);

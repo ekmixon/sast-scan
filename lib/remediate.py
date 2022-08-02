@@ -36,11 +36,10 @@ def get_help(
     desc = ""
     if rules_message_map.get(rule_id):
         return rules_message_map.get(rule_id)
-    cis_rule = get_rule(rule_id)
-    if cis_rule:
+    if cis_rule := get_rule(rule_id):
         cis_desc = cis_rule.get("text", "").strip()
         if cis_desc and not cis_desc.endswith("."):
-            cis_desc = cis_desc + "."
+            cis_desc = f"{cis_desc}."
         rem_text = cis_rule.get(
             "remediation",
             f"Refer to the provider documentation for the configuration options available.{IAC_LINKS}",
@@ -51,7 +50,7 @@ def get_help(
         desc = f"""CIS Benchmark: **{cis_rule.get("id", "")}**\n\n{cis_desc}\n\n{rationale_text}## Remediation\n\n{rem_text}"""
         if cis_rule.get("help_url"):
             help_urls = "\n- ".join(cis_rule.get("help_url"))
-            desc = desc + f"""\n\n## Additional information\n\n- {help_urls}"""
+            desc = f"""{desc}\n\n## Additional information\n\n- {help_urls}"""
         return desc
     else:
         desc = rule_obj.get("fullDescription", {}).get("text")

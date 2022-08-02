@@ -64,7 +64,7 @@ class ASTPatternFinder(object):
                         for match in self.scan_file(filepath):
                             yield filepath, match
                     except SyntaxError as e:
-                        warnings.warn("Failed to parse {}:\n{}".format(filepath, e))
+                        warnings.warn(f"Failed to parse {filepath}:\n{e}")
 
 
 def must_exist_checker(node, path):
@@ -137,8 +137,9 @@ class ArgsDefChecker:
                 sample_arg, sample_dflt = sample_kwonlyargs[argname]
             except KeyError:
                 raise astcheck.ASTMismatch(
-                    path + ["kwonlyargs"], "(missing)", "keyword arg %s" % argname
+                    path + ["kwonlyargs"], "(missing)", f"keyword arg {argname}"
                 )
+
             else:
                 assert_ast_like(
                     sample_arg, template_arg, path + ["kwonlyargs", argname]
@@ -152,8 +153,7 @@ class ArgsDefChecker:
         # be any more args in the sample than the template
         if not self.koa_subset:
             template_kwarg_names = {k.arg for k, d in self.kwonly_args_dflts}
-            excess_names = set(sample_kwonlyargs) - template_kwarg_names
-            if excess_names:
+            if excess_names := set(sample_kwonlyargs) - template_kwarg_names:
                 raise astcheck.ASTMismatch(
                     path + ["kwonlyargs"], excess_names, "(not present in template)"
                 )
@@ -169,14 +169,8 @@ MULTIWILDCARD_NAME = "__astsearch_multiwildcard"
 
 class TemplatePruner(ast.NodeTransformer):
     def visit_Name(self, node):
-        if node.id == WILDCARD_NAME:
+        if node.id in [WILDCARD_NAME, MULTIWILDCARD_NAME]:
             return must_exist_checker  # Allow any node type for a wildcard
-        elif node.id == MULTIWILDCARD_NAME:
-            # This shouldn't happen, but users will probably confuse their
-            # wildcards at times. If it's in a block, it should have been
-            # transformed before it's visited.
-            return must_exist_checker
-
         # Generalise names to allow attributes as well, because these are often
         # interchangeable.
         return astcheck.name_or_attr(node.id)
@@ -240,11 +234,7 @@ class TemplatePruner(ast.NodeTransformer):
                 )
                 break
         else:
-            if node.args:
-                args = self._visit_list(node.args)
-            else:
-                args = must_not_exist_checker
-
+            args = self._visit_list(node.args) if node.args else must_not_exist_checker
         defaults = [
             (a.arg, self.visit(d))
             for a, d in zip(node.args[-len(node.defaults) :], node.defaults)
@@ -252,10 +242,7 @@ class TemplatePruner(ast.NodeTransformer):
         ]
 
         if node.vararg is None:
-            if positional_final_wildcard:
-                vararg = None
-            else:
-                vararg = must_not_exist_checker
+            vararg = None if positional_final_wildcard else must_not_exist_checker
         else:
             vararg = self.visit(node.vararg)
 
@@ -270,10 +257,7 @@ class TemplatePruner(ast.NodeTransformer):
         ) or any(a.arg == MULTIWILDCARD_NAME for a in node.kwonlyargs)
 
         if node.kwarg is None:
-            if koa_subset:
-                kwarg = None
-            else:
-                kwarg = must_not_exist_checker
+            kwarg = None if koa_subset else must_not_exist_checker
         else:
             kwarg = self.visit(node.kwarg)
 
@@ -346,9 +330,7 @@ class TemplatePruner(ast.NodeTransformer):
                             sample_kwargs[k.arg], k.value, path + [k.arg]
                         )
                     else:
-                        raise astcheck.ASTMismatch(
-                            path, "(missing)", "keyword arg %s" % k.arg
-                        )
+                        raise astcheck.ASTMismatch(path, "(missing)", f"keyword arg {k.arg}")
 
             if template_keywords:
                 node.keywords = kwargs_checker

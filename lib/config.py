@@ -61,9 +61,8 @@ SHIFTLEFT_NGSAST_CMD = "/opt/sl-cli/sl-latest"
 SHIFTLEFT_URI = "https://www.shiftleft.io"
 
 # ShiftLeft vulnerabilities api url
-SHIFTLEFT_VULN_API = "{}/api/v3/public/org/%(sl_org)s/app/%(app_name)s/version/%(version)s/vulnerabilities".format(
-    SHIFTLEFT_URI
-)
+SHIFTLEFT_VULN_API = f"{SHIFTLEFT_URI}/api/v3/public/org/%(sl_org)s/app/%(app_name)s/version/%(version)s/vulnerabilities"
+
 
 PR_COMMENT_TEMPLATE = """## Scan Summary
 
@@ -225,11 +224,10 @@ def get_suppress_fingerprints(working_dir):
                 baselinedata = json.loads(baselinefile.read())
                 # We are interested only in baseline_fingerprints in the baseline file
                 if baselinedata.get("baseline_fingerprints"):
-                    tmp_suppress_fingerprints = baselinedata.get(
+                    if tmp_suppress_fingerprints := baselinedata.get(
                         "baseline_fingerprints"
-                    )
-                    if tmp_suppress_fingerprints:
-                        suppress_fingerprints.update(tmp_suppress_fingerprints)
+                    ):
+                        suppress_fingerprints |= tmp_suppress_fingerprints
                         set("suppress_fingerprints", suppress_fingerprints)
                         return suppress_fingerprints
             except Exception:
@@ -269,10 +267,11 @@ def set(configName, value):
 """
 Mapping for application types to scan tools for projects requiring just a single tool
 """
+
 scan_tools_args_map = {
     "ansible": [
         "ansible-lint",
-        *["--exclude " + d for d in ignore_directories],
+        *[f"--exclude {d}" for d in ignore_directories],
         "--parseable-severity",
         "*.yml",
     ],
@@ -807,6 +806,7 @@ scan_tools_args_map = {
     },
 }
 
+
 """
 Map of build tools for various language types. Used for auto build feature
 """
@@ -1301,15 +1301,10 @@ class Cwe(object):
         self.id = id
 
     def link(self):
-        if self.id == Cwe.NOTSET:
-            return ""
-
-        return Cwe.MITRE_URL_PATTERN % str(self.id)
+        return "" if self.id == Cwe.NOTSET else Cwe.MITRE_URL_PATTERN % str(self.id)
 
     def __str__(self):
-        if self.id == Cwe.NOTSET:
-            return ""
-        return "CWE-%i" % (self.id)
+        return "" if self.id == Cwe.NOTSET else "CWE-%i" % (self.id)
 
     def as_dict(self):
         return {"id": self.id, "link": self.link()} if self.id != Cwe.NOTSET else {}
@@ -1318,10 +1313,7 @@ class Cwe(object):
         return str(self.as_dict())
 
     def from_dict(self, data):
-        if "id" in data:
-            self.id = int(data["id"])
-        else:
-            self.id = Cwe.NOTSET
+        self.id = int(data["id"]) if "id" in data else Cwe.NOTSET
 
     def __eq__(self, other):
         return self.id == other.id

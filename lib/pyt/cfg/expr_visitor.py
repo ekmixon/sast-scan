@@ -42,15 +42,15 @@ class ExprVisitor(StmtVisitor):
         self.local_modules = local_modules if self._allow_local_modules else []
         self.filenames = [filename]
         self.blackbox_assignments = set()
-        self.nodes = list()
+        self.nodes = []
         self.function_call_index = 0
         self.undecided = False
-        self.function_names = list()
-        self.function_return_stack = list()
-        self.function_definition_stack = list()  # used to avoid recursion
-        self.module_definitions_stack = list()
-        self.prev_nodes_to_avoid = list()
-        self.last_control_flow_nodes = list()
+        self.function_names = []
+        self.function_return_stack = []
+        self.function_definition_stack = []
+        self.module_definitions_stack = []
+        self.prev_nodes_to_avoid = []
+        self.last_control_flow_nodes = []
         self._within_mutating_call = False
         # Are we already in a module?
         if module_definitions:
@@ -118,10 +118,10 @@ class ExprVisitor(StmtVisitor):
 
         # Yield is a bit like augmented assignment to a return value
         this_function_name = self.function_return_stack[-1]
-        LHS = "yld_" + this_function_name
+        LHS = f"yld_{this_function_name}"
         return self.append_node(
             YieldNode(
-                LHS + " += " + label.result,
+                f"{LHS} += {label.result}",
                 LHS,
                 node,
                 rhs_visitor_result + [LHS],
@@ -187,7 +187,7 @@ class ExprVisitor(StmtVisitor):
             saved_variables(list[SavedVariable])
             first_node(EntryOrExitNode or None or RestoreNode): Used to connect previous statements to this function.
         """
-        saved_variables = list()
+        saved_variables = []
         saved_variables_so_far = set()
         first_node = None
 
@@ -204,19 +204,18 @@ class ExprVisitor(StmtVisitor):
             if assignment.left_hand_side in saved_variables_so_far:
                 continue
             saved_variables_so_far.add(assignment.left_hand_side)
-            save_name = "save_{}_{}".format(
-                saved_function_call_index, assignment.left_hand_side
-            )
+            save_name = f"save_{saved_function_call_index}_{assignment.left_hand_side}"
 
             previous_node = self.nodes[-1]
 
             saved_scope_node = RestoreNode(
-                save_name + " = " + assignment.left_hand_side,
+                f"{save_name} = {assignment.left_hand_side}",
                 save_name,
                 [assignment.left_hand_side],
                 line_number=line_number,
                 path=self.filenames[-1],
             )
+
             if not first_node:
                 first_node = saved_scope_node
 
@@ -245,7 +244,7 @@ class ExprVisitor(StmtVisitor):
             args_mapping(dict): A mapping of call argument to definition argument.
             first_node(EntryOrExitNode or None or RestoreNode): Used to connect previous statements to this function.
         """
-        args_mapping = dict()
+        args_mapping = {}
         last_return_value_of_nested_call = None
 
         # Create e.g. temp_N_def_arg1 = call_arg1_label_visitor.result for each argument
@@ -253,9 +252,7 @@ class ExprVisitor(StmtVisitor):
             if i > len(def_args) - 1:
                 break
             # If this results in an IndexError it is invalid Python
-            def_arg_temp_name = (
-                "temp_" + str(saved_function_call_index) + "_" + def_args[i]
-            )
+            def_arg_temp_name = f"temp_{str(saved_function_call_index)}_{def_args[i]}"
 
             return_value_of_nested_call = None
             if isinstance(call_arg, ast.Call):
@@ -277,12 +274,13 @@ class ExprVisitor(StmtVisitor):
                 call_arg_rhs_visitor = RHSVisitor()
                 call_arg_rhs_visitor.visit(call_arg)
                 restore_node = RestoreNode(
-                    def_arg_temp_name + " = " + call_arg_label_visitor.result,
+                    f"{def_arg_temp_name} = {call_arg_label_visitor.result}",
                     def_arg_temp_name,
                     call_arg_rhs_visitor.result,
                     line_number=line_number,
                     path=self.filenames[-1],
                 )
+
 
             # If there are no saved variables, then this is the first node
             if not first_node:
@@ -299,15 +297,12 @@ class ExprVisitor(StmtVisitor):
                         last_return_value_of_nested_call.connect(
                             return_value_of_nested_call.first_node
                         )
+                elif isinstance(return_value_of_nested_call, BBorBInode):
+                    first_node.inner_most_call = return_value_of_nested_call
                 else:
-                    # I should only set this once per loop, inner in e.g. `outer(inner(image_name), other_inner(image_name))`
-                    # (inner_most_call is used when predecessor is a ControlFlowNode in connect_control_flow_node)
-                    if isinstance(return_value_of_nested_call, BBorBInode):
-                        first_node.inner_most_call = return_value_of_nested_call
-                    else:
-                        first_node.inner_most_call = (
-                            return_value_of_nested_call.first_node
-                        )
+                    first_node.inner_most_call = (
+                        return_value_of_nested_call.first_node
+                    )
                 # We purposefully should not set this as the first_node of return_value_of_nested_call, last makes sense
                 last_return_value_of_nested_call = return_value_of_nested_call
             self.connect_if_allowed(self.nodes[-1], restore_node)
@@ -341,16 +336,15 @@ class ExprVisitor(StmtVisitor):
             if i > len(def_args) - 1:
                 return
             def_arg_local_name = def_args[i]
-            def_arg_temp_name = (
-                "temp_" + str(saved_function_call_index) + "_" + def_args[i]
-            )
+            def_arg_temp_name = f"temp_{str(saved_function_call_index)}_{def_args[i]}"
             local_scope_node = RestoreNode(
-                def_arg_local_name + " = " + def_arg_temp_name,
+                f"{def_arg_local_name} = {def_arg_temp_name}",
                 def_arg_local_name,
                 [def_arg_temp_name],
                 line_number=line_number,
                 path=self.filenames[-1],
             )
+
             # Chain the local scope nodes together
             self.nodes[-1].connect(local_scope_node)
             self.nodes.append(local_scope_node)
@@ -369,8 +363,9 @@ class ExprVisitor(StmtVisitor):
         len_before_visiting_func = len(self.nodes)
         previous_node = self.nodes[-1]
         entry_node = self.append_node(
-            EntryOrExitNode("Function Entry " + definition.name)
+            EntryOrExitNode(f"Function Entry {definition.name}")
         )
+
         if not first_node:
             first_node = entry_node
         self.connect_if_allowed(previous_node, entry_node)
@@ -380,7 +375,7 @@ class ExprVisitor(StmtVisitor):
             return (IgnoredNode, first_node)
         entry_node.connect(function_body_connect_statements.first_statement)
 
-        exit_node = self.append_node(EntryOrExitNode("Exit " + definition.name))
+        exit_node = self.append_node(EntryOrExitNode(f"Exit {definition.name}"))
         exit_node.connect_predecessors(function_body_connect_statements.last_statements)
 
         the_new_nodes = self.nodes[len_before_visiting_func:]
@@ -399,31 +394,33 @@ class ExprVisitor(StmtVisitor):
         Note: We do not need connect_if_allowed because of the
               preceding call to save_local_scope.
         """
-        restore_nodes = list()
+        restore_nodes = []
         for var in saved_variables:
             # Is var.RHS a call argument?
             if var.RHS in args_mapping:
                 # If so, use the corresponding definition argument for the RHS of the label.
                 restore_nodes.append(
                     RestoreNode(
-                        var.RHS + " = " + args_mapping[var.RHS],
+                        f"{var.RHS} = {args_mapping[var.RHS]}",
                         var.RHS,
                         [var.LHS],
                         line_number=line_number,
                         path=self.filenames[-1],
                     )
                 )
+
             else:
                 # Create a node for e.g. foo = save_1_foo
                 restore_nodes.append(
                     RestoreNode(
-                        var.RHS + " = " + var.LHS,
+                        f"{var.RHS} = {var.LHS}",
                         var.RHS,
                         [var.LHS],
                         line_number=line_number,
                         path=self.filenames[-1],
                     )
                 )
+
 
         # Chain the restore nodes
         for node, successor in zip(restore_nodes, restore_nodes[1:]):
@@ -459,15 +456,16 @@ class ExprVisitor(StmtVisitor):
             return  # No return value
 
         # Create e.g. ~call_1 = ret_func_foo RestoreNode
-        LHS = CALL_IDENTIFIER + "call_" + str(saved_function_call_index)
+        LHS = f"{CALL_IDENTIFIER}call_{str(saved_function_call_index)}"
         RHS = rhs_prefix + get_call_names_as_string(call_node.func)
         return_node = RestoreNode(
-            LHS + " = " + RHS,
+            f"{LHS} = {RHS}",
             LHS,
             [RHS],
             line_number=call_node.lineno,
             path=self.filenames[-1],
         )
+
         return_node.first_node = first_node
         self.nodes[-1].connect(return_node)
         self.nodes.append(return_node)
@@ -538,8 +536,9 @@ class ExprVisitor(StmtVisitor):
         _id = get_call_names_as_string(node.func)
         local_definitions = self.module_definitions_stack[-1]
 
-        alias = handle_aliases_in_calls(_id, local_definitions.import_alias_mapping)
-        if alias:
+        if alias := handle_aliases_in_calls(
+            _id, local_definitions.import_alias_mapping
+        ):
             definition = local_definitions.get_definition(alias)
         else:
             definition = local_definitions.get_definition(_id)

@@ -40,12 +40,12 @@ def get_gradle_cmd(src, cmd_args):  # scan:ignore
                 | stat.S_IROTH,
             )
         except Exception:
-            LOG.debug("Ensure {} has execute permissions".format(fullPath))
+            LOG.debug(f"Ensure {fullPath} has execute permissions")
         cmd_args[0] = fullPath
     return cmd_args
 
 
-def auto_build(type_list, src, reports_dir):  # scan:ignore
+def auto_build(type_list, src, reports_dir):    # scan:ignore
     """
     Automatically build project identified by type
 
@@ -63,29 +63,27 @@ def auto_build(type_list, src, reports_dir):  # scan:ignore
         if not lang_tools:
             continue
         if isinstance(lang_tools, list):
-            cp = exec_tool(
+            if cp := exec_tool(
                 "auto-build",
                 lang_tools,
                 src,
                 env=os.environ.copy(),
                 stdout=subprocess.PIPE,
-            )
-            if cp:
+            ):
                 LOG.debug(cp.stdout)
                 ret = ret & (cp.returncode == 0)
             if len(type_list) == 1:
                 return ret
         # Look for any _scan function in this module for execution
         try:
-            dfn = getattr(sys.modules[__name__], "%s_build" % ptype, None)
-            if dfn:
+            if dfn := getattr(sys.modules[__name__], f"{ptype}_build", None):
                 dfn(src, reports_dir, lang_tools)
         except Exception:
             continue
     return ret
 
 
-def java_build(src, reports_dir, lang_tools):  # scan:ignore
+def java_build(src, reports_dir, lang_tools):    # scan:ignore
     """
     Automatically build java project
 
@@ -117,14 +115,15 @@ def java_build(src, reports_dir, lang_tools):  # scan:ignore
             "Java auto build is supported only for maven or gradle or sbt based projects"
         )
         return False
-    cp = exec_tool("auto-build", cmd_args, src, env=env, stdout=subprocess.PIPE)
-    if cp:
+    if cp := exec_tool(
+        "auto-build", cmd_args, src, env=env, stdout=subprocess.PIPE
+    ):
         LOG.debug(cp.stdout)
         return cp.returncode == 0
     return False
 
 
-def android_build(src, reports_dir, lang_tools):  # scan:ignore
+def android_build(src, reports_dir, lang_tools):    # scan:ignore
     """
     Automatically build android project
 
@@ -151,14 +150,15 @@ def android_build(src, reports_dir, lang_tools):  # scan:ignore
             "Build the project using bazel build command and pass the jar path as SHIFTLEFT_ANALYZE_FILE"
         )
         return False
-    cp = exec_tool("auto-build", cmd_args, src, env=env, stdout=subprocess.PIPE)
-    if cp:
+    if cp := exec_tool(
+        "auto-build", cmd_args, src, env=env, stdout=subprocess.PIPE
+    ):
         LOG.debug(cp.stdout)
         return cp.returncode == 0
     return False
 
 
-def kotlin_build(src, reports_dir, lang_tools):  # scan:ignore
+def kotlin_build(src, reports_dir, lang_tools):    # scan:ignore
     """
     Automatically build kotlin project
 
@@ -174,16 +174,14 @@ def kotlin_build(src, reports_dir, lang_tools):  # scan:ignore
         src, "AndroidManifest.xml", False, True
     ):
         return android_build(src, reports_dir, lang_tools)
-    if gradle_kts_files:
-        cmd_args = get_gradle_cmd(src, lang_tools.get("gradle"))
-        cp = exec_tool(
-            "auto-build", cmd_args, src, env=get_env(), stdout=subprocess.PIPE
-        )
-        if cp:
-            LOG.debug(cp.stdout)
-            return cp.returncode == 0
-    else:
+    if not gradle_kts_files:
         return java_build(src, reports_dir, lang_tools)
+    cmd_args = get_gradle_cmd(src, lang_tools.get("gradle"))
+    if cp := exec_tool(
+        "auto-build", cmd_args, src, env=get_env(), stdout=subprocess.PIPE
+    ):
+        LOG.debug(cp.stdout)
+        return cp.returncode == 0
 
 
 def scala_build(src, reports_dir, lang_tools):  # scan:ignore
@@ -212,7 +210,7 @@ def groovy_build(src, reports_dir, lang_tools):  # scan:ignore
     return java_build(src, reports_dir, lang_tools)
 
 
-def nodejs_build(src, reports_dir, lang_tools):  # scan:ignore
+def nodejs_build(src, reports_dir, lang_tools):    # scan:ignore
     """
     Automatically build nodejs project
 
@@ -227,8 +225,7 @@ def nodejs_build(src, reports_dir, lang_tools):  # scan:ignore
     rush_mode = False
     rushjson_files = [p.as_posix() for p in Path(src).glob("rush.json")]
     pjson_files = [p.as_posix() for p in Path(src).glob("package.json")]
-    ylock_files = [p.as_posix() for p in Path(src).glob("yarn.lock")]
-    if ylock_files:
+    if ylock_files := [p.as_posix() for p in Path(src).glob("yarn.lock")]:
         cmd_args = lang_tools.get("yarn")
         yarn_mode = True
     elif rushjson_files:
@@ -239,8 +236,7 @@ def nodejs_build(src, reports_dir, lang_tools):  # scan:ignore
             "Nodejs auto build is supported only for npm or yarn or rush based projects"
         )
         return False
-    cp = exec_tool("auto-build", cmd_args, src)
-    if cp:
+    if cp := exec_tool("auto-build", cmd_args, src):
         ret = cp.returncode == 0
     else:
         ret = False
@@ -263,7 +259,7 @@ def nodejs_build(src, reports_dir, lang_tools):  # scan:ignore
     return ret
 
 
-def php_build(src, reports_dir, lang_tools):  # scan:ignore
+def php_build(src, reports_dir, lang_tools):    # scan:ignore
     """
     Automatically build php project
 
@@ -278,37 +274,45 @@ def php_build(src, reports_dir, lang_tools):  # scan:ignore
     cjson_files = [p.as_posix() for p in Path(src).glob("composer.json")]
     # If there is no composer.json try to create one
     if not cjson_files:
-        cp = exec_tool(
+        if cp := exec_tool(
             "auto-build",
             lang_tools.get("init"),
             src,
             env=os.environ.copy(),
             stdout=subprocess.PIPE,
-        )
-        if cp:
+        ):
             LOG.debug(cp.stdout)
-    cp = exec_tool(
-        "auto-build", cmd_args, src, env=os.environ.copy(), stdout=subprocess.PIPE
-    )
-    if cp:
+    if cp := exec_tool(
+        "auto-build",
+        cmd_args,
+        src,
+        env=os.environ.copy(),
+        stdout=subprocess.PIPE,
+    ):
         LOG.debug(cp.stdout)
         ret = cp.returncode == 0
     # If composer install fails, try composer update
     if not ret:
         cmd_args = lang_tools.get("update")
-        cp = exec_tool(
-            "auto-build", cmd_args, src, env=os.environ.copy(), stdout=subprocess.PIPE
-        )
-        if cp:
+        if cp := exec_tool(
+            "auto-build",
+            cmd_args,
+            src,
+            env=os.environ.copy(),
+            stdout=subprocess.PIPE,
+        ):
             LOG.debug(cp.stdout)
             ret = cp.returncode == 0
     # Do composer autoload now
     if ret:
         cmd_args = lang_tools.get("autoload")
-        cp = exec_tool(
-            "auto-build", cmd_args, src, env=os.environ.copy(), stdout=subprocess.PIPE
-        )
-        if cp:
+        if cp := exec_tool(
+            "auto-build",
+            cmd_args,
+            src,
+            env=os.environ.copy(),
+            stdout=subprocess.PIPE,
+        ):
             LOG.debug(cp.stdout)
             ret = cp.returncode == 0
     return ret

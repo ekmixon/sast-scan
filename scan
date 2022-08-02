@@ -132,11 +132,9 @@ def scan_project_types(
       repo_context Repo context
     """
     for type_str in type_list:
-        # Find if there is any scan mode specific config
-        cmd_map_list = config.get("scan_tools_args_map").get(type_str + "-" + scan_mode)
-        if not cmd_map_list:
-            cmd_map_list = config.get("scan_tools_args_map").get(type_str)
-        if cmd_map_list:
+        if cmd_map_list := config.get("scan_tools_args_map").get(
+            f"{type_str}-{scan_mode}"
+        ) or config.get("scan_tools_args_map").get(type_str):
             # Default command list can be in the form of a list or dict
             if isinstance(cmd_map_list, list):
                 pool.apply_async(
@@ -182,18 +180,15 @@ def scan_project_types(
         else:
             # Look for any _scan function in this module for execution
             try:
-                dfn = getattr(sys.modules[__name__], "%s_scan" % type_str, None)
-                if dfn:
+                if dfn := getattr(
+                    sys.modules[__name__], f"{type_str}_scan", None
+                ):
                     pool.apply_async(dfn, (src, reports_dir, convert, repo_context))
                 else:
                     x_scan(type_str, src, reports_dir, convert, repo_context)
             except Exception as e:
                 LOG.debug(e)
-                LOG.warning(
-                    "Scan using the {} plugin did not produce valid result".format(
-                        type_str
-                    )
-                )
+                LOG.warning(f"Scan using the {type_str} plugin did not produce valid result")
 
 
 def init_worker():
@@ -310,7 +305,7 @@ def py_deep_scan(src, reports_dir, convert, repo_context):
             src, py_files
         )
         if not vulnerabilities and not insights:
-            LOG.debug(f"taint-python has not found any vulnerabilities or insights")
+            LOG.debug("taint-python has not found any vulnerabilities or insights")
             return
         py_json_report(vulnerabilities, insights, report_fname)
         if convert:
@@ -726,7 +721,7 @@ def main():
         console.print(ngsast_logo, style="info")
     else:
         console.print(product_logo, style="info")
-    LOG.info("Scanning {} using plugins {}".format(src_dir, type))
+    LOG.info(f"Scanning {src_dir} using plugins {type}")
     if args.auto_build or config.get("scan_auto_build"):
         build_res = auto_build(type, src_dir, reports_dir)
         if not build_res:
@@ -773,12 +768,10 @@ def main():
         # Issue https://github.com/ShiftLeftSecurity/scan-action/issues/23
         if not sarif_files:
             create_empty_result(src_dir, reports_dir)
-        if not args.noerror and not scan_mode == "ide":
+        if not args.noerror and scan_mode != "ide":
             sys.exit(1 if build_status == "fail" else 0)
     else:
-        LOG.debug(
-            "No scan summary was produced - {}, {}".format(sarif_files, agg_fname)
-        )
+        LOG.debug(f"No scan summary was produced - {sarif_files}, {agg_fname}")
         create_empty_result(src_dir, reports_dir)
 
 
